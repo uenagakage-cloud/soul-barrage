@@ -306,6 +306,20 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 
+// スティック感度（1〜10、標準5）。最高速に達するまでに必要な倒し幅だけを変える
+let sens = clamp(parseInt(store.get('sb_sens', '5'), 10) || 5, 1, 10);
+const stickReach = () => L.stickR * (1.6 - sens * 0.12); // 1:1.48倍 / 5:1.0倍 / 10:0.4倍
+function applySens(v) {
+  sens = clamp(parseInt(v, 10) || 5, 1, 10);
+  store.set('sb_sens', String(sens));
+  document.querySelectorAll('.sensIn').forEach(el => { el.value = sens; });
+  document.querySelectorAll('.sensVal').forEach(el => { el.textContent = sens; });
+}
+document.querySelectorAll('.sensIn').forEach(el => el.addEventListener('input', () => applySens(el.value)));
+applySens(sens);
+$('btnSettings').onclick = () => { releaseStick(); show('settings'); };
+$('btnSettingsClose').onclick = () => hide('settings');
+
 // スティック入力
 // スマホは Touch Events で指ごとに追跡し、毎イベントで「その指がまだ画面にあるか」を確認する。
 // （指を離したイベントを取りこぼしても、次のタッチ操作で必ず解除される＝入りっぱなし防止）
@@ -364,8 +378,8 @@ function readInput() {
   let x = 0, y = 0;
   if (stick.id !== null) {
     const dx = stick.x - stick.ox, dy = stick.y - stick.oy, d = Math.hypot(dx, dy);
-    const dead = 6;
-    if (d > dead) { const m = Math.min(1, (d - dead) / (L.stickR - dead)); x = dx / d * m; y = dy / d * m; }
+    const dead = 6, reach = stickReach();
+    if (d > dead) { const m = Math.min(1, (d - dead) / (reach - dead)); x = dx / d * m; y = dy / d * m; }
   }
   let kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
   let ky = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
@@ -739,9 +753,15 @@ function drawControls(now) {
   ctx.globalAlpha = active ? 0.9 : 0.35;
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
   ctx.beginPath(); ctx.arc(ox, oy, L.stickR, 0, Math.PI * 2); ctx.stroke();
+  // 最高速になる位置（感度で変わる）を点線で表示
+  ctx.setLineDash([4, 5]); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(ox, oy, stickReach(), 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
   let kx = ox, ky = oy;
   if (active) {
-    kx = ox + input.x * L.stickR; ky = oy + input.y * L.stickR;
+    // ノブは指の位置（外枠までで止める）
+    const dx = stick.x - ox, dy = stick.y - oy, d = Math.hypot(dx, dy), k = d > L.stickR ? L.stickR / d : 1;
+    kx = ox + dx * k; ky = oy + dy * k;
   }
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(kx, ky, L.stickR * 0.42, 0, Math.PI * 2); ctx.fill();
   if (!active) { ctx.fillStyle = '#000'; ctx.font = '11px DotGothic16, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('MOVE', kx, ky); }

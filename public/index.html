@@ -87,6 +87,10 @@
   .plrow { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 16px; border-bottom: 1px dashed #333; }
   .plrow .r { margin-left: auto; font-size: 13px; color: #aaa; }
   .win { color: #ffd60a; }
+  .sens { margin-top: 14px; }
+  .sens label b { color: #ffd60a; font-size: 16px; }
+  .sensIn { width: 100%; height: 32px; accent-color: #ffd60a; touch-action: pan-x; }
+  .sensHint { font-size: 12px; color: #888; margin: 2px 0 0; }
   .tag { font-size: 11px; border: 1px solid; padding: 0 4px; }
   .tag.ok { color: #32d74b; } .tag.wait { color: #777; } .tag.host { color: #ffd60a; } .tag.spec { color: #64d2ff; }
   #lobbyCode { font-size: 15px; color: #fff; margin: 0 0 8px; }
@@ -109,6 +113,11 @@
     <label for="nameIn">なまえ（10文字まで）</label>
     <input id="nameIn" type="text" maxlength="10" placeholder="なまえを入力" autocomplete="off">
     <div class="swatches" id="swatches"></div>
+    <div class="sens">
+      <label for="sensTitle">スティック感度 <b class="sensVal">5</b></label>
+      <input type="range" id="sensTitle" class="sensIn" min="1" max="10" step="1">
+      <p class="sensHint">高いほど少し倒すだけで最高速に（最高速は同じ）</p>
+    </div>
   </div>
 
   <div class="card">
@@ -150,6 +159,7 @@
   <button class="hbtn" id="btnShare">招待</button>
   <span class="sp"></span>
   <span id="ping"></span>
+  <button class="hbtn" id="btnSettings" aria-label="設定">⚙</button>
   <button class="hbtn" id="btnSound">♪</button>
   <button class="hbtn" id="btnLeave">退出</button>
 </div>
@@ -179,6 +189,19 @@
     <h2 id="resTitle">RESULT</h2>
     <div id="resList"></div>
     <p class="note" id="resNote"></p>
+  </div>
+</div>
+
+<!-- 設定 -->
+<div class="overlay hidden" id="settings" style="z-index:25">
+  <div class="panel">
+    <h2>設定</h2>
+    <div class="sens">
+      <label for="sensGame">スティック感度 <b class="sensVal">5</b></label>
+      <input type="range" id="sensGame" class="sensIn" min="1" max="10" step="1">
+      <p class="sensHint">高いほど少し倒すだけで最高速に（最高速は同じ）。<br>スティックの内側の点線の円が「最高速になる位置」です</p>
+    </div>
+    <button class="btn primary" id="btnSettingsClose">とじる</button>
   </div>
 </div>
 
