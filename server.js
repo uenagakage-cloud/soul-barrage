@@ -324,10 +324,11 @@ const BOSSES = [
 // d: 攻撃の強さ（弾数・弾速）の上乗せ / gap: 攻撃の間隔の倍率 / layer: 別の攻撃を重ねる確率 [第1形態, 第2形態]
 // hp: ボスHPの倍率 / move: ボスの移動速度の倍率 / press: 攻撃の合間に端から飛んでくる自機狙い弾の間隔 ms [第1, 第2]
 // rage: HP25%以下で「最後のあがき」（必ず2つ重ね＋50%で3つ目、さらに速く）
+// heal: 回復アイテムの出現量の倍率（2 = 2倍）
 const STAGE_BOOST = [
   null, null, null,
   { d: 0.6, gap: 0.7, layer: [0.3, 0.55], hp: 1.1, move: 1.15, press: [2600, 1900], rage: false }, // STAGE 4
-  { d: 1.2, gap: 0.5, layer: [0.6, 0.9], hp: 1.25, move: 1.3, press: [1800, 1300], rage: true },   // STAGE 5
+  { d: 1.2, gap: 0.5, layer: [0.6, 0.9], hp: 1.25, move: 1.3, press: [1800, 1300], rage: true, heal: 2 }, // STAGE 5
 ];
 
 let highScores = []; // ソロ生存時間のトップ10（メモリ保持。サーバー再起動でリセット）
@@ -516,6 +517,7 @@ class Room {
     this.pshots = [];
     this.nextPattern = now + 3200; // 登場セリフの間は攻撃しない
     this.nextPatternStart = this.nextPattern;
+    this.nextExtraHeal = 0;
     this.talk(def.intro[0], 1600, now);
     setTimeout(() => { if (this.boss && this.boss.def === def && !this.boss.deadAt) this.talk(def.intro[1], 1800, Date.now()); }, 1600);
     this.emit('stage', { stage: this.storyStage, total: BOSSES.length, name: def.name });
@@ -694,12 +696,22 @@ class Room {
       if (this.mode === 'story') this.tickBoss(now);
       if (this.state !== 'play') return; // 全ボス撃破で終了した
       if (now >= this.nextPattern) this.runPattern(now);
+      const m = 40 + this.inset(now);
+      const top = this.mode === 'story' ? 180 : m; // ストーリーではボスのいる上側を避ける
+      const healX = this.mode === 'story' && this.boss && this.boss.boost ? (this.boss.boost.heal || 1) : 1;
+      const maxItems = healX > 1 ? 4 : 2;
       if (now >= this.nextItem) {
         this.nextItem = now + rand(7000, 11000) * this.dp.item;
-        if (this.items.length < 2) {
-          const m = 40 + this.inset(now);
-          const top = this.mode === 'story' ? 180 : m; // ストーリーではボスのいる上側を避ける
+        if (this.items.length < maxItems) {
           this.items.push({ id: this.iid++, type: Math.random() < 0.6 ? 'heal' : 'charge', x: rand(m, C.W - m), y: rand(top, C.H - m), until: now + 12000 });
+        }
+      }
+      // 回復アイテムの追加出現（ステージ5は回復だけ2倍）
+      if (healX > 1 && now >= (this.nextExtraHeal || 0)) {
+        const first = !this.nextExtraHeal;
+        this.nextExtraHeal = now + rand(7000, 11000) * this.dp.item / 0.6 / (healX - 1); // 通常の回復（出現の60%）と同じペースをもう1本
+        if (!first && this.items.length < maxItems) {
+          this.items.push({ id: this.iid++, type: 'heal', x: rand(m, C.W - m), y: rand(top, C.H - m), until: now + 12000 });
         }
       }
       this.items = this.items.filter(it => it.until > now);
