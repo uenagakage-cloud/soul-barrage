@@ -423,6 +423,7 @@ const L = { w: 0, h: 0, bx: 0, by: 0, bs: 300, sc: 1, fire: { x: 0, y: 0, r: 46 
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   keys.add(e.code);
+  if (ctrlEdit.on) return;
   if ((e.code === 'Space' || e.code === 'KeyZ' || e.code === 'KeyJ') && !e.repeat) tryFire(keyboardAimAngle());
   if ((e.code === 'KeyX' || e.code === 'KeyK') && !e.repeat) trySpecial();
   if (e.code === 'Enter' && G.st === 'lobby' && roomId && !e.repeat) (!isPublic && amHost() ? $('btnStart') : $('btnReady')).click();
@@ -481,6 +482,7 @@ const onSpBtn = (x, y) => L.sp && Math.hypot(x - L.sp.x, y - L.sp.y) < L.sp.r * 
 
 function pointerDown(id, x, y) {
   if (!roomId) return;
+  if (ctrlEdit.on) return editDown(id, x, y);
   audioInit();
   if (onSpBtn(x, y)) { trySpecial(); return; }
   if (onFireBtn(x, y)) {
@@ -490,6 +492,7 @@ function pointerDown(id, x, y) {
   if (stick.id === null) { stick.id = id; stick.ox = stick.x = x; stick.oy = stick.y = y; }
 }
 function pointerMove(id, x, y) {
+  if (ctrlEdit.on) return editMove(id, x, y);
   if (id === aim.id) {
     aim.x = x; aim.y = y;
     const dx = x - L.fire.x, dy = y - L.fire.y;
@@ -504,6 +507,7 @@ function pointerMove(id, x, y) {
   if (d > lim) { stick.ox = stick.x - dx / d * lim; stick.oy = stick.y - dy / d * lim; }
 }
 function pointerUp(id) {
+  if (ctrlEdit.on) return editUp(id);
   if (id === aim.id) {
     const inCenter = Math.hypot(aim.x - L.fire.x, aim.y - L.fire.y) <= AIM_TH;
     if (!aim.dragged) tryFire(autoAimAngle());
@@ -745,7 +749,82 @@ function resize() {
   }
   L.stickR = L.portrait ? 50 : 56;
   L.sc = C ? L.bs / C.W : 1;
+  applyCtrlLayout();
 }
+
+// ===== ボタン配置のカスタマイズ（縦画面・横画面で別々に保存） =====
+// 保存形式：{ stick|fire|sp: { x, y（画面に対する割合）, s（サイズ倍率） } }
+const CTRL_NAMES = { stick: 'スティック', fire: 'SHOT', sp: 'SP（必殺技）' };
+const ctrlKey = () => 'sb_ctrl_' + (L.portrait ? 'p' : 'l');
+function loadCtrl() { try { return JSON.parse(store.get(ctrlKey(), '{}')) || {}; } catch { return {}; } }
+function saveCtrl(o) { store.set(ctrlKey(), JSON.stringify(o)); }
+function ctrlObj(name) { return name === 'stick' ? L.stickHome : name === 'fire' ? L.fire : L.sp; }
+function ctrlR(name) { return name === 'stick' ? L.stickR : ctrlObj(name).r; }
+function applyCtrlLayout() {
+  const ov = loadCtrl();
+  L.base = { stick: L.stickR, fire: L.fire.r, sp: L.sp.r };
+  for (const name of Object.keys(CTRL_NAMES)) {
+    const o = ov[name]; if (!o) continue;
+    const r = L.base[name] * (o.s || 1);
+    if (name === 'stick') L.stickR = r; else ctrlObj(name).r = r;
+    if (o.x != null) {
+      const c = ctrlObj(name);
+      c.x = clamp(o.x * L.w, r, L.w - r);
+      c.y = clamp(o.y * L.h, 52 + r, L.h - r);
+    }
+  }
+}
+const ctrlEdit = { on: false, sel: 'fire', drag: null };
+function openCtrlEdit() {
+  resetInput(); hide('settings');
+  ctrlEdit.on = true; ctrlEdit.drag = null;
+  show('ctrlEdit'); selectCtrl(ctrlEdit.sel);
+}
+function closeCtrlEdit() { ctrlEdit.on = false; ctrlEdit.drag = null; hide('ctrlEdit'); }
+function selectCtrl(name) {
+  ctrlEdit.sel = name;
+  const o = loadCtrl()[name] || {};
+  $('ceSize').value = Math.round((o.s || 1) * 100);
+  $('ceVal').textContent = $('ceSize').value + '%';
+  $('ceName').textContent = CTRL_NAMES[name];
+}
+function editDown(id, x, y) {
+  // 触ったボタンを選択してドラッグ開始（近いものを優先）
+  let best = null, bd = Infinity;
+  for (const name of Object.keys(CTRL_NAMES)) {
+    const c = ctrlObj(name), d = Math.hypot(x - c.x, y - c.y);
+    if (d < ctrlR(name) * 1.3 && d < bd) { bd = d; best = name; }
+  }
+  if (!best) return;
+  selectCtrl(best);
+  const c = ctrlObj(best);
+  ctrlEdit.drag = { id, dx: x - c.x, dy: y - c.y };
+}
+function editMove(id, x, y) {
+  const d = ctrlEdit.drag;
+  if (!d || d.id !== id) return;
+  const name = ctrlEdit.sel, c = ctrlObj(name), r = ctrlR(name);
+  c.x = clamp(x - d.dx, r, L.w - r);
+  c.y = clamp(y - d.dy, 52 + r, L.h - r);
+}
+function editUp(id) {
+  const d = ctrlEdit.drag;
+  if (!d || d.id !== id) return;
+  ctrlEdit.drag = null;
+  const name = ctrlEdit.sel, c = ctrlObj(name), ov = loadCtrl();
+  ov[name] = { ...(ov[name] || {}), x: +(c.x / L.w).toFixed(4), y: +(c.y / L.h).toFixed(4) };
+  saveCtrl(ov);
+}
+$('ceSize').addEventListener('input', () => {
+  const ov = loadCtrl(), name = ctrlEdit.sel;
+  ov[name] = { ...(ov[name] || {}), s: +$('ceSize').value / 100 };
+  saveCtrl(ov);
+  $('ceVal').textContent = $('ceSize').value + '%';
+  resize();
+});
+$('ceReset').onclick = () => { store.set(ctrlKey(), '{}'); resize(); selectCtrl(ctrlEdit.sel); toast('ボタン配置を標準に戻しました', '#aaa', 1500); };
+$('ceDone').onclick = () => closeCtrlEdit();
+$('btnCtrlEdit').onclick = () => openCtrlEdit();
 addEventListener('resize', resize);
 resize();
 
@@ -1276,6 +1355,7 @@ function drawHpLine() {
 }
 
 function drawControls(now) {
+  if (ctrlEdit.on) drawCtrlEdit();
   // スティック
   const active = stick.id !== null;
   const ox = active ? stick.ox : L.stickHome.x, oy = active ? stick.oy : L.stickHome.y;
@@ -1298,7 +1378,7 @@ function drawControls(now) {
   ctx.globalAlpha = 1;
 
   // SPボタン（必殺技ゲージ）
-  if (L.sp && G.st === 'play' && me.alive) {
+  if (L.sp && ((G.st === 'play' && me.alive) || ctrlEdit.on)) {
     const s = L.sp, full = me.sp >= C.SP_MAX, pulse = full ? 0.5 + 0.5 * Math.sin(performance.now() / 120) : 0;
     const pr = performance.now() - spPressed < 120;
     ctx.fillStyle = full ? (pr ? '#fff' : `rgba(191,90,242,${0.35 + pulse * 0.4})`) : '#111';
@@ -1337,6 +1417,22 @@ function drawControls(now) {
   } else ctx.fillStyle = ready ? (pressed ? '#000' : '#ffd60a') : '#777';
   ctx.font = '15px DotGothic16, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(label, lx, ly);
+}
+
+// ボタン配置の編集中：各ボタンの範囲を点線で囲み、選択中は黄色で強調
+function drawCtrlEdit() {
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0, 0, L.w, L.h);
+  for (const name of Object.keys(CTRL_NAMES)) {
+    const c = ctrlObj(name), r = ctrlR(name) * 1.3, on = name === ctrlEdit.sel;
+    ctx.setLineDash([6, 5]); ctx.lineWidth = on ? 3 : 2;
+    ctx.strokeStyle = on ? '#ffd60a' : 'rgba(255,255,255,0.6)';
+    ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = on ? '#ffd60a' : '#fff'; ctx.font = '12px DotGothic16, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(CTRL_NAMES[name], c.x, c.y - r - 4);
+  }
+  ctx.restore();
 }
 
 // ===== ループ =====

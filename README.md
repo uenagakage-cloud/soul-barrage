@@ -45,5 +45,9 @@ The difficulty numbers are in `DIFFS` in `server.js`. Boss HP, lines and attack 
 ## BGM
 
 Each boss has its own chiptune in `public/music.js`, generated live in the browser with Web Audio (no audio files).
-Each song loops A section → B section → C section (4 bars each, 12 bars total). The C section is a bridge with half-time drums, ending in a snare roll back into the A section. The melody, chords, bass and drums are written as text, so it's easy to edit or add songs. In the second form the tempo rises and the key goes up a semitone.
+Song structure: intro (A-section backing, first time only) → A → B → A → C → B (climax) → back to A, repeating. The C section is a bridge with half-time drums, ending in a snare roll into the climax.
 You can listen to every song in the in-game settings (⚙) under "サウンドテスト" (sound test).
+
+## Button layout
+
+In settings (⚙) → "ボタンの位置・サイズを変更" (change button position and size), you can drag the stick, SHOT and SP buttons to move them and change their size (60–160%). The layout is saved per device, separately for portrait and landscape.

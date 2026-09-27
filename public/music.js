@@ -1,6 +1,6 @@
 // SOUL BARRAGE - ボスごとの専用BGM（Web Audio でその場で演奏するチップチューン。音声ファイル不要）
 //
-// 曲の構成：Aメロ(mel) → Bメロ(melB) → Cメロ(melC) 各4小節、計12小節をループ
+// 曲の構成：イントロ（Aの伴奏）→ A → B → A → C → B(ラスサビ) → Aに戻って繰り返し（各4小節）
 // 曲データの書き方（1小節 = 16トークン = 16分音符×16）
 //   mel   : Aメロ。'C5' などの音名 / '-' 前の音を伸ばす / '.' 休符
 //   melB / chordsB / gtrB / drmB : Bメロ用（gtrB・drmB を省略すると Bメロ用の標準パターン / Aと同じドラム）
@@ -11,8 +11,8 @@
 //   drm   : ドラム。k=キック s=スネア h=ハイハット o=オープンハイハット t=タム .=なし
 //   lead  : メロディの音色 saw2(厚いノコギリ波) / pulse12・pulse25(細いパルス) / square / triangle
 //   harm  : 2周目以降に重ねるハモリの音程（半音。-5 = 4度下）
-// 演奏中の変化：各メロの頭でクラッシュ、Bメロは常にハモリ（Aメロは2周目以降）、B・Cへ入る前にフィル、
-//              Cメロの最後はスネアロールで盛り上げてAメロに戻る。
+// 演奏中の変化：セクションの頭でクラッシュ（ラスサビは毎小節）、Bメロと2回目以降のAメロにハモリ、
+//              B・Cへ入る前とAに戻る前にフィル、Cメロの最後はスネアロールでラスサビへ。
 // 第2形態（ボスのHPが半分以下）ではテンポが上がり、半音上に転調する。
 (() => {
 'use strict';
@@ -469,18 +469,10 @@ const toks = (str) => { const t = str.trim().split(/\s+/).slice(0, 16); while (t
 const GTR_B = 'X - - x X - - x X - - x X . x x'; // Bメロ標準：伸ばし気味のパワーコード
 const GTR_C = 'X - - - - - - - X - - - X - - -'; // Cメロ標準：ゆったり伸ばす
 const DRM_C = 'k . h . h . h . s . h . h . h .'; // Cメロ標準：ハーフタイム
-function compile(song) {
-  // セクション（A/B/C）を並べる
-  const secs = [{ mel: song.mel, chords: song.chords, gt: song.gtr, dm: song.drm }];
-  if (song.melB) secs.push({ mel: song.melB, chords: song.chordsB, gt: song.gtrB || GTR_B, dm: song.drmB || song.drm });
-  if (song.melC) secs.push({ mel: song.melC, chords: song.chordsC, gt: song.gtrC || GTR_C, dm: song.drmC || DRM_C });
-  const barSec = [], secStart = [], chords = [], gtB = [], dmB = [];
-  secs.forEach((sec, si) => sec.mel.forEach((_, b) => {
-    barSec.push(si); secStart.push(b === 0);
-    chords.push(sec.chords[b % sec.chords.length]); gtB.push(toks(sec.gt)); dmB.push(toks(sec.dm));
-  }));
-  const bars = barSec.length, steps = bars * 16, barsA = song.mel.length;
-  const mt = secs.flatMap(sec => sec.mel).flatMap(toks);
+// 1つのセクション（4小節）を「ステップごとの発音リスト」に変換
+function compileSection(song, mel, chordList, gtrStr, drmStr) {
+  const bars = mel.length, steps = bars * 16;
+  const mt = mel.flatMap(toks), gt = toks(gtrStr), dm = toks(drmStr);
   const lead = new Array(steps).fill(null);
   for (let i = 0; i < steps; i++) {
     const midi = midiOf(mt[i]);
@@ -491,8 +483,7 @@ function compile(song) {
   }
   const bass = new Array(steps).fill(null), gtr = new Array(steps).fill(null), arp = new Array(steps).fill(null), drm = new Array(steps).fill('.');
   for (let b = 0; b < bars; b++) {
-    const gt = gtB[b], dm = dmB[b];
-    const ch = chordOf(chords[b]);
+    const ch = chordOf(chordList[b % chordList.length]);
     const r1 = 28 + ((ch.root + 8) % 12), r2 = r1 + 12; // ベースは E1〜D#2 あたりに収める
     for (let s = 0; s < 16; s++) {
       const i = b * 16 + s;
@@ -519,7 +510,22 @@ function compile(song) {
       }
     }
   }
-  return { steps, barsA, bars, barSec, secStart, lead, bass, gtr, arp, drm };
+  return { bars, steps, lead, bass, gtr, arp, drm };
+}
+
+// 曲の構成（ふつうの曲っぽく）：
+//   イントロ（Aの伴奏だけ・最初の1回のみ）→ A → B → A → C → B(ラスサビ) → A に戻って繰り返し
+function compile(song) {
+  const secs = [compileSection(song, song.mel, song.chords, song.gtr, song.drm)];
+  if (song.melB) secs.push(compileSection(song, song.melB, song.chordsB, song.gtrB || GTR_B, song.drmB || song.drm));
+  if (song.melC) secs.push(compileSection(song, song.melC, song.chordsC, song.gtrC || GTR_C, song.drmC || DRM_C));
+  const has = (i) => i < secs.length;
+  const arr = [{ sec: 0, intro: true }, { sec: 0 }];
+  if (has(1)) arr.push({ sec: 1 });
+  arr.push({ sec: 0, again: true });
+  if (has(2)) arr.push({ sec: 2 });
+  if (has(1)) arr.push({ sec: 1, final: true });
+  return { secs, arr };
 }
 
 // ===== 演奏エンジン =====
@@ -654,35 +660,41 @@ function schedule(horizon) {
   const { song, data } = cur;
   const until = horizon ?? AC.currentTime + 0.15;
   while (cur.nextT < until) {
-    const i = cur.step % data.steps, loop = Math.floor(cur.step / data.steps), bar = Math.floor(i / 16), s = i % 16;
+    const part = data.arr[cur.pi], S = data.secs[part.sec];
+    const i = cur.ps, bar = Math.floor(i / 16), s = i % 16;
     if (s === 0 && cur.pending) { cur.phase = cur.pending; cur.pending = 0; } // 形態変化は小節の頭で
     const p2 = cur.phase === 2, tr = p2 ? 1 : 0;           // 第2形態は半音上へ転調
     const stepDur = 60 / (song.bpm * (p2 ? 1.12 : 1)) / 4;   // 16分音符の長さ（第2形態はテンポアップ）
     const t = cur.nextT, bus = cur.bus;
-    // メロディ（偶数ループはハモリを重ねる）
-    const L = data.lead[i];
+    // メロディ（イントロは伴奏だけ）。ハモリ：Bメロ・2回目のAメロ・2周目以降
+    const L = part.intro ? null : S.lead[i];
     if (L) {
       const dur = L.len * stepDur * (song.stacc ? 0.5 : 0.92);
       leadNote(bus, t, L.midi + tr, dur, song, song.leadVol);
-      const sec = data.barSec[bar];
-      if (song.harm && (sec === 1 || (sec === 0 && loop % 2 === 1))) leadNote(bus, t, L.midi + tr + song.harm, dur, song, song.leadVol * 0.55);
+      const harmOn = part.sec === 1 || (part.sec === 0 && (part.again || cur.loop > 0));
+      if (song.harm && harmOn) leadNote(bus, t, L.midi + tr + song.harm, dur, song, song.leadVol * (part.final ? 0.7 : 0.55));
     }
-    const B = data.bass[i];
+    const B = S.bass[i];
     if (B) bassNote(bus, t, B.midi + tr, B.len * stepDur * 0.9, B.acc);
-    const Gt = data.gtr[i];
+    const Gt = S.gtr[i];
     if (Gt) gtrHit(bus, t, Gt.root + tr, Gt.fifth, Gt.len * stepDur * (Gt.hard ? 0.95 : 0.55), Gt.hard);
-    const A = data.arp[i];
+    const A = part.intro && bar < 2 ? null : S.arp[i]; // イントロ前半は分散和音も控えめに
     if (A) leadNote(bus, t, A.midi + tr, stepDur * 0.7, { lead: song.arp === 'square' ? 'pulse25' : 'triangle' }, song.arp === 'square' ? 0.012 : 0.03);
-    // ドラム：各メロの頭でクラッシュ。B・Cへ入る直前はフィル、曲の最後の小節はスネアロールで盛り上げる
-    const lastBar = bar === data.bars - 1, nextStart = bar + 1 < data.bars && data.secStart[bar + 1];
-    const roll = lastBar && s >= 8;
-    const fill = !roll && s >= 12 && nextStart && (data.barSec[bar + 1] !== 1 || loop % 2 === 1);
-    if (s === 0 && data.secStart[bar]) drum(bus, t, 'c');
+    // ドラム：セクションの頭でクラッシュ（ラスサビは毎小節）。
+    //   次がCへ入る前・構成の最後（Aに戻る前）はフィル、Cの最後はスネアロールでラスサビへ
+    const lastBar = bar === S.bars - 1, next = data.arr[cur.pi + 1];
+    const roll = lastBar && s >= 8 && part.sec === 2;
+    const fill = !roll && lastBar && s >= 12 && (part.intro || !next || (next && next.sec !== 0));
+    if (s === 0 && (bar === 0 || part.final)) drum(bus, t, 'c');
     if (roll) { drum(bus, t, 's', s >= 12); if (s % 4 === 0) drum(bus, t, 'k'); }
     else if (fill) { drum(bus, t, s % 2 ? 's' : 't', FILL_TOM[s]); if (s === 12) drum(bus, t, 'k'); }
-    else { const d = data.drm[i]; if (d && d !== '.') drum(bus, t, d, s % 4 === 0); }
+    else { const d = S.drm[i]; if (d && d !== '.') drum(bus, t, d, s % 4 === 0); }
     cur.nextT += stepDur;
-    cur.step++;
+    // 次のステップへ。セクションの終わりで構成の次へ、最後まで行ったらイントロを飛ばしてAから
+    if (++cur.ps >= S.steps) {
+      cur.ps = 0;
+      if (++cur.pi >= data.arr.length) { cur.pi = 1; cur.loop++; }
+    }
   }
 }
 
@@ -700,7 +712,7 @@ function stop(fade = 0.4) {
 function play(key, phase) {
   const song = SONGS[key];
   if (!song) return stop();
-  cur = { key, song, data: compile(song), step: 0, nextT: AC.currentTime + 0.1, phase, bus: makeBus(song, 60 / song.bpm / 4) };
+  cur = { key, song, data: compile(song), pi: 0, ps: 0, loop: 0, nextT: AC.currentTime + 0.1, phase, bus: makeBus(song, 60 / song.bpm / 4) };
   clearInterval(timer);
   timer = setInterval(() => schedule(), 25);
   schedule();
@@ -721,12 +733,12 @@ function setVolume(v) {
 }
 
 // 検証用：曲をオフラインで書き出して音量を測る（スピーカー不要）
-async function render(key, seconds = 4, phase = 1, startBar = 0) {
+async function render(key, seconds = 4, phase = 1, startPart = 0) {
   const saved = { AC, master, noise, waves, shaperCurve, cur, timer };
   const off = new OfflineAudioContext(1, Math.ceil(44100 * seconds), 44100);
   AC = null; master = null; ensureOut(off);
   const song = SONGS[key];
-  cur = { key, song, data: compile(song), step: startBar * 16, nextT: 0.05, phase, bus: makeBus(song, 60 / song.bpm / 4) };
+  cur = { key, song, data: compile(song), pi: startPart, ps: 0, loop: 0, nextT: 0.05, phase, bus: makeBus(song, 60 / song.bpm / 4) };
   schedule(seconds);
   ({ AC, master, noise, waves, shaperCurve, cur, timer } = saved);
   return off.startRendering();
