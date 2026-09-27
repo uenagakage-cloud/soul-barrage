@@ -104,7 +104,7 @@ socket.on('clear', () => {
 
 socket.on('s', (s) => {
   const prevSt = G.st;
-  G.st = s.st; G.su = s.su; G.rs = s.rs; G.rd = s.rd; G.md = s.md;
+  G.st = s.st; G.su = s.su; G.rs = s.rs; G.rd = s.rd; G.md = s.md; G.bgm = s.bgm;
   const cfgChanged = s.cfg.join() !== G.cfg.join();
   G.cfg = s.cfg;
   if (cfgChanged) updateLobby();
@@ -674,11 +674,23 @@ function setPreview(on) {
 $('bgmPlay').onclick = () => { audioInit(); setPreview(!preview); };
 $('bgmSel').onchange = () => { if (preview) setPreview(true); };
 $('bgmP2').onchange = () => { if (preview) setPreview(true); };
-// 流すべき曲：サウンドテスト中はその曲、ストーリーのボス戦中はボスの曲（撃破後は止めて勝利ジングル）
+// 流すべき曲：サウンドテスト中はその曲、ストーリーのボス戦中はボスの曲（撃破後は止めて勝利ジングル）、
+// バトルモードはサーバーがランダムに選んだボスの曲（40秒たつと第2形態アレンジに）
+let lastBgmShown = '';
 function updateMusic() {
   if (!window.SBMusic) return;
   const b = G.boss;
   let key = roomId && G.md === 'story' && G.st === 'play' && b && !b.dead ? b.key : null, phase = b ? b.phase : 1;
+  if (roomId && G.md !== 'story' && G.st === 'play' && G.bgm) {
+    key = G.bgm;
+    phase = sNow() - G.rs >= C.SHRINK_START ? 2 : 1;
+    const tag = G.rd + ':' + G.bgm;
+    if (tag !== lastBgmShown) { // ラウンド開始時に曲名を表示
+      lastBgmShown = tag;
+      const song = SBMusic.songs.find(x => x.key === G.bgm);
+      if (song && soundOn && bgmVol > 0) toast('♪ ' + song.title, '#bf5af2', 3000);
+    }
+  }
   if (preview) ({ key, phase } = preview);
   SBMusic.update(AC, key, phase, soundOn && bgmVol > 0);
 }

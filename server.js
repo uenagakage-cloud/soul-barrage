@@ -467,6 +467,8 @@ class Room {
     this.boss = null;
     const list = [...this.players.values()];
     this.mode = this.cfg.game === 'story' ? 'story' : list.length >= 2 ? 'versus' : 'solo';
+    // バトルモードのBGM：全ボスの曲からランダムに1曲（部屋の全員で同じ曲）
+    this.bgm = this.mode === 'story' ? null : pick(BOSSES.flat()).key;
     list.forEach((p, i) => {
       if (this.mode === 'story') {
         // ボスは上にいるので、下側に横一列で並ぶ
@@ -741,6 +743,7 @@ class Room {
     this.emit('s', {
       st: this.state, su: this.stateUntil, rs: this.roundStart, rd: this.round, md: this.mode, now,
       cfg: [this.cfg.game, this.cfg.diff, this.storyStage, BOSSES.length],
+      bgm: this.bgm || null,
       p: [...this.players.values()].map(p => [p.id, Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10, p.hp, p.alive ? 1 : 0, Math.max(0, p.iframeUntil - now), Math.max(0, p.cdUntil - now), Math.floor(p.sp)]),
       it: this.items.map(it => [it.id, it.type, Math.round(it.x), Math.round(it.y)]),
       bs: b ? [b.def.key, Math.round(b.x), Math.round(b.y), Math.max(0, Math.ceil(b.hp)), b.max, this.storyStage, b.phase, b.flashUntil > now ? 1 : 0, b.deadAt ? 1 : 0, b.def.name, b.def.color, b.def.r] : null,

@@ -47,6 +47,7 @@ The difficulty numbers are in `DIFFS` in `server.js`. Boss HP, lines and attack 
 
 Each boss has its own chiptune in `public/music.js`, generated live in the browser with Web Audio (no audio files).
 Song structure: intro (A-section backing, first time only) → A → B → A → C → B (climax) → back to A, repeating. The C section is a bridge with half-time drums, ending in a snare roll into the climax.
+Battle mode (solo survival / battle royale) also plays one boss song picked at random each round (the same one for everyone in the room), switching to the second-form arrangement after 40 seconds.
 You can listen to every song in the in-game settings (⚙) under "サウンドテスト" (sound test).
 
 ## Button layout
