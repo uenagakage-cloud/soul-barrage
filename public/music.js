@@ -103,6 +103,62 @@ const SONGS = {
       'C#6 . A5 . E5 . C#5 . E5 . A5 . C#6 . E6 .',
     ],
   },
+  mushroom: {
+    title: 'ポコタ「スポア・パニック」', bpm: 160, lead: 'pulse25', leadVol: 0.05, harm: -5,
+    chords: ['Gm', 'Eb', 'F', 'D'], bass: 'syncop', arp: null,
+    mel: [
+      'G5 . G5 Bb5 . G5 D6 . C6 . Bb5 . A5 . G5 .',
+      'Eb5 . Eb5 G5 . Eb5 Bb5 . A5 . G5 . F5 . Eb5 .',
+      'F5 . F5 A5 . F5 C6 . Bb5 . A5 . G5 . F5 .',
+      'D5 . F#5 . A5 . D6 . C6 . A5 . F#5 . D5 .',
+    ],
+    gtr: 'X . . x . x x . X . . x . x . x',
+    drm: 'k . h . s . h k . k h . s . h h',
+    // --- Bメロ ---
+    chordsB: ['Cm', 'Gm', 'Eb', 'D'],
+    melB: [
+      'C6 - - Bb5 G5 - - Eb5 C5 . Eb5 . G5 . C6 .',
+      'Bb5 - - A5 G5 - - D5 Bb4 . D5 . G5 . Bb5 .',
+      'G5 . Bb5 . Eb6 . G6 . F6 . Eb6 . D6 . Bb5 .',
+      'A5 - - - F#5 - - - D5 . E5 . F#5 . A5 .',
+    ],
+    // --- Cメロ ---
+    chordsC: ['Eb', 'F', 'Gm', 'D'],
+    melC: [
+      'Bb5 . . . G5 . . . Eb5 . . . G5 . Bb5 .',
+      'C6 . . . A5 . . . F5 . . . A5 . C6 .',
+      'D6 . Bb5 . G5 . Bb5 . D6 . G6 . F6 . D6 .',
+      'F#6 - - - D6 - - - A5 - - - F#5 - - -',
+    ],
+  },
+  bat: {
+    title: 'バッティ「ナイト・フライト」', bpm: 176, lead: 'pulse12', leadVol: 0.05, echo: true, harm: -5,
+    chords: ['C#m', 'A', 'B', 'G#'], bass: 'rock16', arp: null,
+    mel: [
+      'C#6 . G#5 . E5 . G#5 . C#6 . D#6 . E6 . D#6 .',
+      'C#6 . A5 . E5 . A5 . C#6 . B5 . A5 . G#5 .',
+      'B5 . F#5 . D#5 . F#5 . B5 . C#6 . D#6 . F#6 .',
+      'G#5 . C6 . D#6 . G#6 . F#6 . D#6 . C6 . G#5 .',
+    ],
+    gtr: 'X . x . X . x . X . x x X . x .',
+    drm: 'k . h h s . h . k k h . s . h o',
+    // --- Bメロ ---
+    chordsB: ['F#m', 'C#m', 'A', 'G#'],
+    melB: [
+      'F#5 - - A5 C#6 - - F#6 E6 - - C#6 A5 - - -',
+      'E5 - - G#5 C#6 - - E6 D#6 - - C#6 G#5 - - -',
+      'A5 - - C#6 E6 - - A6 G#6 - - E6 C#6 - - -',
+      'C6 - - - D#6 - - - G#6 - - - F#6 . D#6 .',
+    ],
+    // --- Cメロ ---
+    chordsC: ['A', 'E', 'F#m', 'G#'],
+    melC: [
+      'E6 . . . C#6 . . . A5 . . . C#6 . . .',
+      'B5 . . . G#5 . . . E5 . . . G#5 . . .',
+      'A5 . C#6 . F#6 . C#6 . A5 . F#5 . A5 . C#6 .',
+      'C6 . D#6 . G#6 . D#6 . C6 . G#5 . C6 . D#6 .',
+    ],
+  },
   // ===== STAGE 2 =====
   knight: {
     title: 'ホネナイト「ボーン・クラッシャー」', bpm: 176, lead: 'square', leadVol: 0.04, harm: -5,
@@ -187,6 +243,62 @@ const SONGS = {
       'E6 . . . C#6 . . . A5 . . . E5 . . .',
       'D6 . B5 . G5 . B5 . D6 . G6 . F#6 . E6 .',
       'C#6 . . . A#5 . . . F#5 . A#5 . C#6 . F#6 .',
+    ],
+  },
+  golem: {
+    title: 'ガンセキ「ロック・クラッシュ」', bpm: 138, lead: 'saw2', leadVol: 0.03, harm: -5,
+    chords: ['Em', 'Em', 'C', 'D'], bass: 'syncop', arp: null,
+    mel: [
+      'E5 - - . E5 . G5 . F#5 - - . D5 . E5 .',
+      'E5 - - . E5 . B5 . A5 - - . G5 . F#5 .',
+      'C5 - - . C5 . E5 . G5 - - . F#5 . E5 .',
+      'D5 - - . D5 . F#5 . A5 - - - B5 . . .',
+    ],
+    gtr: 'X - - x X - - x X - - x X x x x',
+    drm: 'k . . h s . . k k . k h s . h .',
+    // --- Bメロ ---
+    chordsB: ['Am', 'Em', 'C', 'B'],
+    melB: [
+      'A5 - - - C6 - - - B5 - A5 - G5 - E5 -',
+      'G5 - - - B5 - - - A5 - G5 - F#5 - E5 -',
+      'E5 - - - G5 - - - C6 - - - E6 - - -',
+      'D#6 - - - B5 - - - F#5 - - - D#5 - - -',
+    ],
+    // --- Cメロ ---
+    chordsC: ['C', 'D', 'Em', 'B'],
+    melC: [
+      'G5 . . . E5 . . . C5 . . . E5 . G5 .',
+      'A5 . . . F#5 . . . D5 . . . F#5 . A5 .',
+      'B5 . G5 . E5 . G5 . B5 . E6 . D6 . B5 .',
+      'D#6 . B5 . F#5 . B5 . D#6 . F#6 . B5 - - -',
+    ],
+  },
+  jelly: {
+    title: 'ゆらら「ディープ・ブルー」', bpm: 150, lead: 'pulse25', leadVol: 0.05, vib: 4, echo: true, harm: -5,
+    chords: ['Fm', 'Db', 'Eb', 'C'], bass: 'drive', arp: 'triangle', arpOct: 5,
+    mel: [
+      'F5 . Ab5 . C6 . Ab5 . F5 . G5 . Ab5 . C6 .',
+      'Db6 . Ab5 . F5 . Ab5 . Db6 . C6 . Bb5 . Ab5 .',
+      'Eb6 . Bb5 . G5 . Bb5 . Eb6 . F6 . G6 . Eb6 .',
+      'E6 . C6 . G5 . C6 . E6 . G6 . Bb6 . G6 .',
+    ],
+    gtr: '. . . . X - - - . . . . X - x .',
+    drm: 'k . h . s . h . k . h . s . h h',
+    // --- Bメロ ---
+    chordsB: ['Bbm', 'Fm', 'Db', 'C'],
+    melB: [
+      'Bb5 - - - Db6 - - - F6 - - - Eb6 - Db6 -',
+      'C6 - - - Ab5 - - - F5 - - - Ab5 - C6 -',
+      'Db6 - - - F6 - - - Ab6 - - - G6 - F6 -',
+      'E6 - - - G6 - - - C6 - - - Bb5 - G5 -',
+    ],
+    // --- Cメロ ---
+    chordsC: ['Db', 'Eb', 'Fm', 'C'],
+    melC: [
+      'Ab5 . . . F5 . . . Db5 . . . F5 . Ab5 .',
+      'Bb5 . . . G5 . . . Eb5 . . . G5 . Bb5 .',
+      'C6 . Ab5 . F5 . Ab5 . C6 . F6 . Eb6 . C6 .',
+      'E6 - - - C6 - - - G5 - - - E5 - - -',
     ],
   },
   // ===== STAGE 3 =====
@@ -275,6 +387,62 @@ const SONGS = {
       'G#6 - - - F6 - - - C#6 - - - G#5 - - -',
     ],
   },
+  samurai: {
+    title: 'カゲマル「月下の剣」', bpm: 168, lead: 'saw2', leadVol: 0.03, echo: true, harm: -5,
+    chords: ['Am', 'Bb', 'Am', 'G'], bass: 'rock16', arp: null,
+    mel: [
+      'A5 . . A5 . . C6 . B5 . . A5 . . E5 .',
+      'Bb5 . . Bb5 . . D6 . C6 . . Bb5 . . F5 .',
+      'A5 . . A5 . . E6 . D6 . C6 . B5 . A5 .',
+      'G5 . B5 . D6 . G6 . F6 . D6 . B5 . G5 .',
+    ],
+    gtr: 'X . x x X . x . X . x x X . x x',
+    drm: 'k h s h k h s h k h s h k k s h',
+    // --- Bメロ ---
+    chordsB: ['Dm', 'Am', 'F', 'E'],
+    melB: [
+      'D6 - - - F6 - - - E6 - D6 - C6 - A5 -',
+      'C6 - - - E6 - - - D6 - C6 - B5 - A5 -',
+      'A5 - - - C6 - - - F6 - - - A6 - - -',
+      'G#6 - - - E6 - - - B5 - - - G#5 - - -',
+    ],
+    // --- Cメロ ---
+    chordsC: ['F', 'G', 'Am', 'E'],
+    melC: [
+      'C6 . . . A5 . . . F5 . . . A5 . C6 .',
+      'D6 . . . B5 . . . G5 . . . B5 . D6 .',
+      'E6 . C6 . A5 . C6 . E6 . A6 . G6 . E6 .',
+      'G#6 . E6 . B5 . E6 . G#6 . B6 - - - . .',
+    ],
+  },
+  kraken: {
+    title: 'クラーケン「アビサル・タイド」', bpm: 158, lead: 'saw2', leadVol: 0.03, harm: -5,
+    chords: ['Dm', 'F', 'C', 'A'], bass: 'syncop', arp: null,
+    mel: [
+      'D5 . . F5 . . A5 . G5 . F5 . E5 . D5 .',
+      'F5 . . A5 . . C6 . Bb5 . A5 . G5 . F5 .',
+      'E5 . . G5 . . C6 . Bb5 . A5 . G5 . E5 .',
+      'C#5 . E5 . A5 . C#6 . E6 . C#6 . A5 . E5 .',
+    ],
+    gtr: 'X . . x . x X . . x . x X . x x',
+    drm: 'k . h k s . h . k . h k s . h h',
+    // --- Bメロ ---
+    chordsB: ['Gm', 'Dm', 'Bb', 'A'],
+    melB: [
+      'G5 - - Bb5 D6 - - G6 F6 - - D6 Bb5 - - -',
+      'F5 - - A5 D6 - - F6 E6 - - D6 A5 - - -',
+      'Bb5 - - D6 F6 - - Bb6 A6 - - F6 D6 - - -',
+      'C#6 - - - E6 - - - A6 - - - G6 . E6 .',
+    ],
+    // --- Cメロ ---
+    chordsC: ['Bb', 'C', 'Dm', 'A'],
+    melC: [
+      'F5 . . . D5 . . . Bb4 . . . D5 . F5 .',
+      'G5 . . . E5 . . . C5 . . . E5 . G5 .',
+      'A5 . F5 . D5 . F5 . A5 . D6 . C6 . A5 .',
+      'C#6 - - - A5 - - - E5 - - - C#5 - - -',
+    ],
+  },
   // ===== STAGE 4 =====
   robot: {
     title: 'ギアロイド「メタル・プロトコル」', bpm: 144, lead: 'square', leadVol: 0.04, harm: -12,
@@ -361,6 +529,62 @@ const SONGS = {
       'D#6 C#6 B5 A#5 B5 A5 G5 F#5 D#5 . F#5 . B5 . . .',
     ],
   },
+  ufo: {
+    title: 'ゼータ「エイリアン・シグナル」', bpm: 170, lead: 'pulse12', leadVol: 0.05, echo: true, harm: -5,
+    chords: ['Bm', 'G', 'Em', 'F#'], bass: 'rock16', arp: 'square', arpOct: 5,
+    mel: [
+      'B5 . D6 . F#6 . D6 . B5 . D6 . F#6 . B6 .',
+      'G5 . B5 . D6 . B5 . G5 . B5 . D6 . G6 .',
+      'E5 . G5 . B5 . G5 . E5 . G5 . B5 . E6 .',
+      'F#5 . A#5 . C#6 . F#6 . E6 . C#6 . A#5 . F#5 .',
+    ],
+    gtr: '. . . . X - - - . . . . X - x x',
+    drm: 'k . h . s . h k k . h . s . h h',
+    // --- Bメロ ---
+    chordsB: ['D', 'A', 'Bm', 'F#'],
+    melB: [
+      'F#6 - - - E6 - - - D6 - C#6 - B5 - A5 -',
+      'E6 - - - C#6 - - - A5 - B5 - C#6 - E6 -',
+      'D6 - - - F#6 - - - B6 - - - A6 - F#6 -',
+      'F#6 - - - C#6 - - - A#5 - - - F#5 - - -',
+    ],
+    // --- Cメロ ---
+    chordsC: ['G', 'A', 'Bm', 'F#'],
+    melC: [
+      'D6 . . . B5 . . . G5 . . . B5 . D6 .',
+      'E6 . . . C#6 . . . A5 . . . C#6 . E6 .',
+      'F#6 . D6 . B5 . D6 . F#6 . B6 . A6 . F#6 .',
+      'A#6 - - - F#6 - - - C#6 - - - A#5 - - -',
+    ],
+  },
+  puppet: {
+    title: 'マリオネ「糸繰りのワルツ」', bpm: 180, lead: 'square', leadVol: 0.04, stacc: true, harm: -5,
+    chords: ['Em', 'B', 'Em', 'D'], bass: 'oompah', arp: null,
+    mel: [
+      'E5 . G5 B5 . . E6 . D6 . B5 . G5 . . .',
+      'D#5 . F#5 B5 . . D#6 . C6 . B5 . F#5 . . .',
+      'E5 . G5 B5 . . E6 . G6 . F#6 . E6 . . .',
+      'D6 . C6 . B5 . A5 . F#5 . D5 . F#5 . A5 .',
+    ],
+    gtr: 'X . x . X . x . X . x . X . x .',
+    drm: 'k . s . k . s h k . s . k h s s',
+    // --- Bメロ ---
+    chordsB: ['Am', 'Em', 'B', 'Em'],
+    melB: [
+      'A5 . C6 E6 . . A6 . G6 . E6 . C6 . . .',
+      'G5 . B5 E6 . . G6 . F#6 . E6 . B5 . . .',
+      'F#5 . A5 B5 . . D#6 . F#6 . B6 . A6 . F#6 .',
+      'E6 . D#6 . E6 . B5 . G5 . E5 . . . . .',
+    ],
+    // --- Cメロ ---
+    chordsC: ['C', 'D', 'Bm', 'B'],
+    melC: [
+      'G5 - - - E5 - - - C5 - - - E5 - G5 -',
+      'A5 - - - F#5 - - - D5 - - - F#5 - A5 -',
+      'B5 - - - F#5 - - - D5 - - - F#5 - B5 -',
+      'D#6 . B5 . F#5 . D#5 . F#5 . B5 . D#6 . F#6 .',
+    ],
+  },
   // ===== STAGE 5 =====
   king: {
     title: 'ソウルキング「キング・オブ・ソウルズ」', bpm: 172, lead: 'saw2', leadVol: 0.032, echo: true, harm: -5,
@@ -445,6 +669,62 @@ const SONGS = {
       'F5 - - - Db5 - - - Ab4 - - - F4 - - -',
       'Bb4 - - - Db5 - - - F5 - - - Bb5 - - -',
       'B5 - - - - - - - G5 - - - D5 - - -',
+    ],
+  },
+  dragonking: {
+    title: 'バハムル「覇王の咆哮」', bpm: 180, lead: 'saw2', leadVol: 0.032, echo: true, harm: -5,
+    chords: ['Dm', 'Bb', 'Gm', 'A'], bass: 'rock16', arp: 'square', arpOct: 5,
+    mel: [
+      'D5 . A5 . D6 - - C6 D6 . F6 . E6 . D6 .',
+      'Bb5 . F5 . Bb5 - - A5 Bb5 . D6 . C6 . Bb5 .',
+      'G5 . D5 . G5 - - F5 G5 . Bb5 . A5 . G5 .',
+      'A5 . C#6 . E6 . A6 . G6 . E6 . C#6 . A5 .',
+    ],
+    gtr: 'X . x x X . x x X . x x X x x x',
+    drm: 'k h s h k k s h k h s h k k s s',
+    // --- Bメロ ---
+    chordsB: ['Bb', 'C', 'Dm', 'A'],
+    melB: [
+      'F5 - - E5 D5 - - C5 Bb4 - D5 - F5 - Bb5 -',
+      'G5 - - F5 E5 - - D5 C5 - E5 - G5 - C6 -',
+      'A5 - - G5 F5 - - E5 D5 - F5 - A5 - D6 -',
+      'C#6 - - - A5 - - - E5 - - - C#5 - - -',
+    ],
+    // --- Cメロ ---
+    chordsC: ['Gm', 'F', 'Eb', 'A'],
+    melC: [
+      'G5 . . . Bb5 . . . D6 . . . G6 . . .',
+      'F5 . . . A5 . . . C6 . . . F6 . . .',
+      'Eb5 . G5 . Bb5 . Eb6 . G6 . Bb6 . G6 . Eb6 .',
+      'E5 - - - A5 - - - C#6 - - - E6 - - -',
+    ],
+  },
+  timekeeper: {
+    title: 'クロノス「クロック・ワーク」', bpm: 144, lead: 'pulse25', leadVol: 0.05, harm: -5,
+    chords: ['Am', 'Am', 'F', 'E'], bass: 'syncop', arp: 'square', arpOct: 5,
+    mel: [
+      'A5 . E5 . A5 . E5 . C6 . B5 . A5 . E5 .',
+      'A5 . E5 . A5 . E5 . D6 . C6 . B5 . G#5 .',
+      'F5 . C5 . F5 . A5 . C6 . A5 . F5 . C5 .',
+      'E5 . G#5 . B5 . E6 . D6 . B5 . G#5 . E5 .',
+    ],
+    gtr: 'X . . X . . X . . X . . X . X .',
+    drm: 'k . h k s . h . k . h k s k h .',
+    // --- Bメロ ---
+    chordsB: ['Dm', 'G', 'C', 'E'],
+    melB: [
+      'D6 - - C6 A5 - - F5 D5 - F5 - A5 - D6 -',
+      'D6 - - B5 G5 - - D5 B4 - D5 - G5 - B5 -',
+      'C6 - - B5 G5 - - E5 C5 - E5 - G5 - C6 -',
+      'B5 - - - G#5 - - - E5 - G#5 - B5 - E6 -',
+    ],
+    // --- Cメロ ---
+    chordsC: ['F', 'G', 'Am', 'E'],
+    melC: [
+      'A5 . . . C6 . . . F6 . . . C6 . . .',
+      'B5 . . . D6 . . . G6 . . . D6 . . .',
+      'C6 . E6 . A6 . E6 . C6 . A5 . C6 . E6 .',
+      'G#6 - - - E6 - - - B5 - - - G#5 - - -',
     ],
   },
 };

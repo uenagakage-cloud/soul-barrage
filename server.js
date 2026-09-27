@@ -74,7 +74,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const W = C.W, H = C.H;
 
 // ===== ストーリーモードのボス =====
-// 各ステージに3体の候補がいて、ステージ開始時にランダムで1体が登場する
+// 各ステージに5体の候補がいて、ステージ開始時にランダムで1体が登場する
 // move: ボスの動き（x = 中央 + sin(t*fx)*ax, y = y + sin(t*fy)*ay）
 // patterns: 通常時の攻撃 / p2: HPが半分を切った後に追加される攻撃
 const BOSSES = [
@@ -107,6 +107,24 @@ const BOSSES = [
       patterns: [['fountain', 3], ['bossDrip', 2], ['ring', 2]],
       p2: [['bossBoomerang', 2], ['bossRing', 2]],
     },
+    {
+      key: 'mushroom', name: 'キノコのポコタ', color: '#ff6b6b', hp: 255, r: 32,
+      move: { ax: 140, fx: 0.6, ay: 12, fy: 2.2, y: 92 },
+      intro: ['* ポコタが ぽこっと はえてきた！', '* 「ほうしを すったら くしゃみが とまらないよ〜」'],
+      phase2: '* ポコタの かさが まっかに ふくらんだ！',
+      defeat: '* ポコタは しぼんで つちに かえった…',
+      patterns: [['bossSnow', 2], ['bossDrip', 2], ['ring', 2]],
+      p2: [['bossRing', 2], ['fountain', 2]],
+    },
+    {
+      key: 'bat', name: 'コウモリのバッティ', color: '#9b59b6', hp: 245, r: 30,
+      move: { ax: 190, fx: 1.0, ay: 34, fy: 2.0, y: 95 },
+      intro: ['* バッティが ばさばさと とびまわる！', '* 「キキッ！ おまえの タマシイ あじみ させろ！」'],
+      phase2: '* バッティの めが あかく ひかった！',
+      defeat: '* バッティは よるの そらへ にげていった…',
+      patterns: [['bossAim', 2], ['bossBoomerang', 2], ['rain', 2]],
+      p2: [['bossWeb', 2], ['aimed', 2]],
+    },
   ],
   // ---- STAGE 2 ----
   [
@@ -136,6 +154,24 @@ const BOSSES = [
       defeat: '* ユキダルマンは とけて みずたまりに なった…',
       patterns: [['bossSnow', 3], ['blueorange', 2], ['bossRing', 2]],
       p2: [['sweep', 2], ['bossBones', 2]],
+    },
+    {
+      key: 'golem', name: '岩の巨人ガンセキ', color: '#a0826d', hp: 360, r: 36,
+      move: { ax: 100, fx: 0.25, ay: 6, fy: 0.8, y: 88 },
+      intro: ['* ガンセキが ずしんと たちあがった！', '* 「……オレ、カタイ。オマエ、ツブス」'],
+      phase2: '* ガンセキの からだに ひびが はいった… おこっている！',
+      defeat: '* ガンセキは くずれて ただの いしに なった…',
+      patterns: [['bossQuake', 3], ['sweep', 2], ['bossBones', 2]],
+      p2: [['cross', 2], ['bossRing', 2]],
+    },
+    {
+      key: 'jelly', name: 'クラゲのゆらら', color: '#ff9ff3', hp: 330, r: 32,
+      move: { ax: 130, fx: 0.35, ay: 36, fy: 0.7, y: 100 },
+      intro: ['* ゆららが ゆらゆらと ただよってきた…', '* 「しびれるの… きもちいいよ…？」'],
+      phase2: '* ゆららの しょくしゅが でんきを おびた！',
+      defeat: '* ゆららは うみの そこへ しずんでいった…',
+      patterns: [['bossDrip', 2], ['bossBoomerang', 2], ['blueorange', 2]],
+      p2: [['bossSpiral', 2], ['bossThunder', 2]],
     },
   ],
   // ---- STAGE 3 ----
@@ -167,6 +203,24 @@ const BOSSES = [
       patterns: [['bossThunder', 3], ['aimed', 2], ['cross', 1]],
       p2: [['bossLaser', 2], ['bossAim', 2]],
     },
+    {
+      key: 'samurai', name: '亡霊武者カゲマル', color: '#c0392b', hp: 430, r: 32,
+      move: { ax: 180, fx: 0.55, ay: 10, fy: 1.2, y: 88 },
+      intro: ['* 亡霊武者カゲマルが しずかに かたなを ぬいた…', '* 「……いざ、じんじょうに しょうぶ」'],
+      phase2: '* カゲマルの かたなが あかく もえあがる！',
+      defeat: '* カゲマルは 「みごと…」と つぶやき きえた…',
+      patterns: [['bossSlash', 3], ['bossAim', 2], ['sweep', 2]],
+      p2: [['bossLaser', 2], ['cross', 2]],
+    },
+    {
+      key: 'kraken', name: '深海のクラーケン', color: '#1abc9c', hp: 440, r: 36,
+      move: { ax: 120, fx: 0.4, ay: 16, fy: 0.9, y: 95 },
+      intro: ['* しんかいから クラーケンが うかびあがった！', '* 「ゴボゴボ… ひきずりこんで やる…」'],
+      phase2: '* クラーケンは すみを はきだした！',
+      defeat: '* クラーケンは ふかい うみへ かえっていった…',
+      patterns: [['bossWeb', 2], ['fountain', 2], ['bossBoomerang', 2]],
+      p2: [['bossSpiral', 2], ['bossDrip', 2]],
+    },
   ],
   // ---- STAGE 4 ----
   [
@@ -197,6 +251,24 @@ const BOSSES = [
       patterns: [['bossDrip', 2], ['blueorange', 2], ['bossBones', 2], ['bossWeb', 1]],
       p2: [['bossThunder', 2], ['fountain', 2]],
     },
+    {
+      key: 'ufo', name: '宇宙船ゼータ', color: '#7bed9f', hp: 500, r: 34,
+      move: { ax: 200, fx: 0.7, ay: 20, fy: 1.5, y: 85 },
+      intro: ['* そらから うちゅうせん ゼータが おりてきた！', '* 「ピピピ… チキュウジン ノ タマシイ ヲ サンプリング スル」'],
+      phase2: '* ゼータは けいかい モードに きりかわった！',
+      defeat: '* ゼータは ほしの かなたへ とびさった…',
+      patterns: [['bossLaser', 2], ['bossThunder', 2], ['bossRing', 2]],
+      p2: [['bossSlash', 2], ['spiral', 2]],
+    },
+    {
+      key: 'puppet', name: '人形師マリオネ', color: '#e056fd', hp: 490, r: 32,
+      move: { ax: 170, fx: 0.8, ay: 26, fy: 1.6, y: 95 },
+      intro: ['* にんぎょうし マリオネが いとを たらした…', '* 「あなたも わたしの おにんぎょうに なりなさい」'],
+      phase2: '* マリオネの いとが ぜんぶ ほどけた！',
+      defeat: '* マリオネは いとが きれて くずれおちた…',
+      patterns: [['bossWeb', 2], ['bossBones', 2], ['blueorange', 2]],
+      p2: [['bossBoomerang', 2], ['cross', 2]],
+    },
   ],
   // ---- STAGE 5 ----
   [
@@ -226,6 +298,24 @@ const BOSSES = [
       defeat: '* ヴォイドは とじて やみに かえった… きみたちの かちだ！',
       patterns: [['bossWeb', 2], ['bossBoomerang', 2], ['bossBones', 2], ['bossLaser', 2]],
       p2: [['bossThunder', 2], ['bossSpiral', 2], ['blueorange', 2]],
+    },
+    {
+      key: 'dragonking', name: '竜王バハムル', color: '#ff7f50', hp: 670, r: 40,
+      move: { ax: 130, fx: 0.4, ay: 18, fy: 0.7, y: 100 },
+      intro: ['* 竜王バハムルが ほのおの なかから あらわれた！', '* 「ちいさき タマシイよ… わが ほのおで やきつくしてくれよう」'],
+      phase2: '* バハムルは おうじゃの ほうこうを あげた！',
+      defeat: '* バハムルは 「みとめよう…」と いい そらへ かえった… きみたちの かちだ！',
+      patterns: [['bossLaser', 2], ['fountain', 2], ['bossSlash', 2], ['bossRing', 2]],
+      p2: [['bossSpiral', 2], ['bossThunder', 2], ['cross', 2]],
+    },
+    {
+      key: 'timekeeper', name: '時の番人クロノス', color: '#f5cd79', hp: 650, r: 38,
+      move: { ax: 90, fx: 0.3, ay: 10, fy: 0.5, y: 100 },
+      intro: ['* 時の番人クロノスが とけいの はりを まわした…', '* 「きみたちの じかんは ここで おわりだ」'],
+      phase2: '* クロノスの はりが ぎゃくまわりを はじめた！',
+      defeat: '* クロノスは とまった とけいと ともに きえた… きみたちの かちだ！',
+      patterns: [['bossClock', 3], ['bossBoomerang', 2], ['bossWeb', 2]],
+      p2: [['bossSlash', 2], ['bossLaser', 2], ['blueorange', 2]],
     },
   ],
 ];
@@ -401,7 +491,7 @@ class Room {
 
   // ===== ストーリー：ボス戦 =====
   startStage(now) {
-    const def = pick(BOSSES[this.storyStage]); // 候補3体からランダム
+    const def = pick(BOSSES[this.storyStage]); // 候補5体からランダム
     const n = Math.max(1, [...this.players.values()].length);
     const hp = Math.round(def.hp * this.dp.bossHp * (0.6 + 0.4 * n)); // 人数が多いほどボスも硬い
     this.lastBossName = def.name;
@@ -505,11 +595,12 @@ class Room {
     for (const b of list) {
       const id = this.bid++;
       const life = b.life || 7000;
-      this.bullets.set(id, { owner: b.owner || null, kind: b.kind || 0, expire: b.t0 + life + 2000 });
       if (this.mode === 'story' && b.owner) this.pshots.push({ id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, t0: b.t0, life, r: b.r || 6, kind: b.kind, owner: b.owner });
       // [id, x, y, vx, vy, ax, ay, r, t0, life, kind, owner, warn]
-      out.push([id, Math.round(b.x), Math.round(b.y), +b.vx.toFixed(1), +b.vy.toFixed(1),
-        +(b.ax || 0).toFixed(1), +(b.ay || 0).toFixed(1), b.r || 7, b.t0, life, b.kind || 0, b.owner || 0, b.warn ? 1 : 0]);
+      const arr = [id, Math.round(b.x), Math.round(b.y), +b.vx.toFixed(1), +b.vy.toFixed(1),
+        +(b.ax || 0).toFixed(1), +(b.ay || 0).toFixed(1), b.r || 7, b.t0, life, b.kind || 0, b.owner || 0, b.warn ? 1 : 0];
+      this.bullets.set(id, { owner: b.owner || null, kind: b.kind || 0, expire: b.t0 + life + 2000, arr }); // arr は途中参加者に送る用
+      out.push(arr);
     }
     if (out.length) this.emit('b', out);
   }
@@ -922,6 +1013,48 @@ const PATTERNS = {
     room.spawn(list);
     return 900 + bolts * 260;
   },
+  // 斬撃：予告のあと、画面を斜めに横切る速い弾の列（居合い斬り）
+  bossSlash(room, now, d, sp) {
+    const cuts = room.dn(2 + d * 0.5), list = [];
+    for (let k = 0; k < cuts; k++) {
+      const t0 = now + 900 + k * 420;
+      const fromLeft = Math.random() < 0.5, y0 = rand(40, H - 40), y1 = rand(40, H - 40);
+      const x0 = fromLeft ? -10 : W + 10, a = Math.atan2(y1 - y0, (fromLeft ? W : -W));
+      for (let i = 0; i < 16; i++) {
+        list.push({ x: x0, y: y0, vx: Math.cos(a) * 420 * sp, vy: Math.sin(a) * 420 * sp, r: 6, t0: t0 + i * 18, life: 2000, warn: i === 0, kind: K.BIG });
+      }
+    }
+    room.spawn(list);
+    return 900 + cuts * 420;
+  },
+  // 時計の針：ボスから2本の「針」（速さの違う弾の列）が回転しながら伸びる
+  bossClock(room, now, d, sp) {
+    const steps = 16, list = [], dir = room.boss && room.boss.phase === 2 ? -1 : 1, off = Math.random() * Math.PI * 2;
+    const hands = room.dn(2 + (d > 2.5 ? 1 : 0));
+    for (let st = 0; st < steps; st++) {
+      const t0 = now + 800 + st * 110, at = room.bossPos(t0);
+      for (let h = 0; h < hands; h++) {
+        const a = off + dir * st * 0.26 + (h / hands) * Math.PI * 2;
+        for (let k = 0; k < 4; k++) {
+          const v = (70 + k * 38) * sp;
+          list.push({ x: at.x, y: at.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 5, t0, warn: st === 0 && h === 0 && k === 0 });
+        }
+      }
+    }
+    room.spawn(list);
+    return 800 + steps * 110;
+  },
+  // 地震：予告のあと大きな岩が降ってきて、床から小石が跳ね上がる
+  bossQuake(room, now, d, sp) {
+    const rocks = room.dn(4 + d), list = [];
+    for (let k = 0; k < rocks; k++) {
+      const x = rand(30, W - 30), t0 = now + 800 + k * 200;
+      list.push({ x, y: -20, vx: 0, vy: 150 * sp, ay: 200 * sp, r: 13, t0, warn: true, kind: K.BIG });
+      for (let i = 0; i < 3; i++) list.push({ x: x + rand(-20, 20), y: H + 10, vx: rand(-90, 90), vy: -rand(220, 300), ay: 300 * sp, r: 5, t0: t0 + 700 });
+    }
+    room.spawn(list);
+    return 800 + rocks * 200 + 600;
+  },
   // 予告つきのレーザー（高速で密な弾の列）をプレイヤーへ
   bossLaser(room, now, d, sp) {
     const list = [], targets = room.alivePlayers();
@@ -974,6 +1107,12 @@ io.on('connection', (socket) => {
     const token = typeof data.token === 'string' ? data.token.slice(0, 40) : null;
     me = r.addPlayer(socket, name, color, token);
     cb && cb({ ok: true, id: socket.id, room: r.id, isPublic: r.isPublic, C, state: r.state });
+    // 試合中に途中参加した人（観戦）には、いま画面上にある弾も送る
+    if (r.state === 'play') {
+      const now = Date.now(), active = [];
+      for (const b of r.bullets.values()) if (b.arr && b.arr[8] + b.arr[9] > now) active.push(b.arr);
+      if (active.length) setTimeout(() => socket.emit('b', active), 100);
+    }
   });
 
   socket.on('start', () => { if (room && me) room.requestStart(me); });
