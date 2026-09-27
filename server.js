@@ -21,7 +21,7 @@ const DIFFS = [
   { name: '普通', speed: 1.0, dens: 1.0, gap: 1.0, dmg: 3, bossHp: 1.0, iframe: 1000, item: 1.0 },
   { name: '難しい', speed: 1.15, dens: 1.3, gap: 0.85, dmg: 4, bossHp: 1.3, iframe: 1000, item: 1.2 },
   { name: '鬼', speed: 1.3, dens: 1.6, gap: 0.7, dmg: 5, bossHp: 1.6, iframe: 850, item: 1.5 },
-  { name: '神', speed: 1.5, dens: 2.0, gap: 0.55, dmg: 6, bossHp: 2.0, iframe: 700, item: 2.0 },
+  { name: '神', speed: 1.5, dens: 2.0, gap: 0.55, dmg: 6, bossHp: 2.0, iframe: 700, item: 2.0, roam: true }, // roam: ボスがフィールド全体を動き回る
 ];
 
 // ===== ゲーム定数（クライアントにも送る） =====
@@ -515,7 +515,15 @@ class Room {
   bossPos(now) {
     const m = this.boss.def.move, t = (now - this.boss.t0) / 1000;
     const k = this.boss.phase === 2 ? 1.4 : 1;
-    return { x: W / 2 + Math.sin(t * m.fx * k) * m.ax, y: m.y + Math.sin(t * m.fy * k) * m.ay };
+    const x = W / 2 + Math.sin(t * m.fx * k) * m.ax, y = m.y + Math.sin(t * m.fy * k) * m.ay;
+    if (!this.dp.roam) return { x, y };
+    // 難易度「神」：8の字（リサージュ曲線）でフィールド全体を動き回る。
+    // 登場セリフの間はいつもの位置にいて、そこから2秒かけて動き出す
+    const R = this.boss.def.r, ph = m.fx * 7; // ボスごとに軌道をずらす
+    const rx = W / 2 + Math.sin(t * 0.5 * k + ph) * (W / 2 - R - 12);
+    const ry = H / 2 + Math.sin(t * 0.8 * k + ph * 0.7) * (H / 2 - R - 20);
+    const f = clamp((t - 2.8) / 2, 0, 1), e = f * f * (3 - 2 * f);
+    return { x: x + (rx - x) * e, y: y + (ry - y) * e };
   }
 
   tickBoss(now) {
@@ -613,9 +621,16 @@ class Room {
       const b = this.boss;
       if (!b || b.deadAt) { this.nextPattern = now + 500; return; }
       const p2 = b.phase === 2;
-      d = 1.3 + this.storyStage * 0.3 + (p2 ? 0.5 : 0);
+      const last = this.storyStage === BOSSES.length - 1; // ステージ5（最終ステージ）
+      d = 1.3 + this.storyStage * 0.3 + (p2 ? 0.5 : 0) + (last ? 0.7 : 0);
       pool = p2 ? [...b.def.patterns, ...b.def.p2] : b.def.patterns;
-      gap = Math.max(350, 1500 - this.storyStage * 100 - (p2 ? 250 : 0));
+      gap = Math.max(last ? 250 : 350, (1500 - this.storyStage * 100 - (p2 ? 250 : 0)) * (last ? 0.7 : 1));
+      // 最終ステージは別の攻撃を同時に重ねてくる（通常30%、第2形態50%）
+      if (last && Math.random() < (p2 ? 0.5 : 0.3)) {
+        const other = pool[Math.floor(Math.random() * pool.length)][0];
+        const sp2 = Math.min(1.9, 0.85 + d * 0.12) * this.dp.speed;
+        setTimeout(() => { if (this.boss === b && !b.deadAt && this.state === 'play') PATTERNS[other](this, Date.now(), d, sp2); }, 250);
+      }
     } else {
       const el = (now - this.roundStart) / 1000;
       d = 1 + el / 25;                        // 難易度（時間とともに上昇）
