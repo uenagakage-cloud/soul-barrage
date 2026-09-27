@@ -24,8 +24,10 @@ const C = {
   SHOT_CD: 2000,           // プレイヤーショット（狙い撃ち）のクールタイム ms
   GRAZE_CUT: 250,          // グレイズ1回でクールタイム短縮 ms
   GRAZE_R: 14,             // グレイズ判定の追加半径
-  SHOT_N: 3,               // 正面に横並びで同時に出る弾の数
-  SHOT_GAP: 16,            // 横並びの弾の間隔 px
+  SHOT_N: 3,               // 1発ごとに正面へ扇状（ショットガン）に広がる弾の数
+  SHOT_SPREAD: 0.7,        // 扇の開き（ラジアン、約40度）
+  SHOT_BURST: 3,           // 連続で撃つ回数
+  SHOT_INTERVAL: 150,      // 連射の間隔 ms
   SHOT_SPEED: 290,
   SHOT_DMG: 4,
   // 必殺技メーター（0〜100）
@@ -345,7 +347,7 @@ class Room {
     }
   }
 
-  // 狙い撃ち：指定角度（正面）に横並びの弾を同時発射。角度がなければ一番近い敵を自動で狙う
+  // 狙い撃ち：指定角度（正面）にショットガンを3連射。角度がなければ一番近い敵を自動で狙う
   onFire(p, now, angle) {
     if (!p.alive || this.state !== 'play' || now < p.cdUntil) return;
     p.cdUntil = now + C.SHOT_CD;
@@ -359,13 +361,21 @@ class Room {
       }
       a0 = best ? Math.atan2(best.y - p.y, best.x - p.x) : -Math.PI / 2;
     }
-    const cos = Math.cos(a0), sin = Math.sin(a0), list = [];
-    for (let i = 0; i < C.SHOT_N; i++) {
-      const off = (i - (C.SHOT_N - 1) / 2) * C.SHOT_GAP; // 進行方向に垂直にずらす
-      list.push({ x: p.x - sin * off, y: p.y + cos * off, vx: cos * C.SHOT_SPEED, vy: sin * C.SHOT_SPEED, r: 6, t0: now + 40, life: 2500, kind: K.SHOT, owner: p.id });
+    // ショットガン（扇状に3発）を SHOT_INTERVAL ごとに3連射。2射目以降はその時点の自分の位置から
+    const round = this.round;
+    const shoot = () => {
+      if (!p.alive || this.state !== 'play' || this.round !== round || !this.players.has(p.id)) return;
+      const list = [];
+      for (let i = 0; i < C.SHOT_N; i++) {
+        const a = a0 + (C.SHOT_N > 1 ? (i / (C.SHOT_N - 1) - 0.5) * C.SHOT_SPREAD : 0);
+        list.push({ x: p.x, y: p.y, vx: Math.cos(a) * C.SHOT_SPEED, vy: Math.sin(a) * C.SHOT_SPEED, r: 6, t0: Date.now() + 40, life: 2500, kind: K.SHOT, owner: p.id });
+      }
+      this.spawn(list);
+      this.emit('fx', { t: 'fire', id: p.id, x: p.x, y: p.y, a: a0 });
+    };
+    for (let i = 0; i < C.SHOT_BURST; i++) {
+      if (i === 0) shoot(); else setTimeout(shoot, i * C.SHOT_INTERVAL);
     }
-    this.spawn(list);
-    this.emit('fx', { t: 'fire', id: p.id, x: p.x, y: p.y, a: a0 });
   }
 
   // 必殺技「ソウルバースト」：メーターを全部使い、全方位リング弾＋周囲の敵弾を消去＋短い無敵

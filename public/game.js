@@ -871,11 +871,14 @@ function drawAim(now) {
   // 単発の弾道を1本の線で表示
   const len = 230;
   ctx.globalAlpha = 0.9; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
-  const ca = Math.cos(aim.angle), sa = Math.sin(aim.angle);
+  // ショットガンの扇（薄い塗り）＋各弾道の線
+  const half = C.SHOT_SPREAD / 2;
+  ctx.globalAlpha = 0.2; ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(me.x, me.y); ctx.arc(me.x, me.y, len, aim.angle - half, aim.angle + half); ctx.closePath(); ctx.fill();
   for (let i = 0; i < C.SHOT_N; i++) {
-    const off = (i - (C.SHOT_N - 1) / 2) * C.SHOT_GAP, ox = -sa * off, oy = ca * off;
-    ctx.globalAlpha = off === 0 ? 0.9 : 0.5;
-    ctx.beginPath(); ctx.moveTo(me.x + ox, me.y + oy); ctx.lineTo(me.x + ox + ca * len, me.y + oy + sa * len); ctx.stroke();
+    const a = aim.angle + (C.SHOT_N > 1 ? (i / (C.SHOT_N - 1) - 0.5) * C.SHOT_SPREAD : 0);
+    ctx.globalAlpha = a === aim.angle ? 0.9 : 0.55;
+    ctx.beginPath(); ctx.moveTo(me.x, me.y); ctx.lineTo(me.x + Math.cos(a) * len, me.y + Math.sin(a) * len); ctx.stroke();
   }
   ctx.restore();
 }
