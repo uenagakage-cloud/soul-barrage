@@ -74,9 +74,23 @@
   #ping { font-size: 11px; color: #777; }
   #plist { position: fixed; z-index: 9; pointer-events: none; font-size: 12px; line-height: 1.5; }
   #plist .pr { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  #plist .ph { width: 14px; display: inline-block; }
   #plist .dead { opacity: .35; }
-  #plist .bar { width: 40px; height: 5px; background: #400; display: inline-block; }
+  #plist .bar { width: 40px; height: 6px; background: #400; display: inline-block; }
   #plist .bar i { display: block; height: 100%; background: #ffd60a; }
+  #plist .bar.low i { background: #ff453a; }
+  /* 縦画面：フィールドの上に横一列で */
+  #plist.row { display: flex; justify-content: center; align-items: center; gap: 8px; }
+  #plist.row .pr { gap: 3px; padding: 1px 3px; border: 1px solid transparent; }
+  #plist.row .pr.me { border-color: #fff; }
+  /* ボスのHP（フィールドの外） */
+  #bossBar { position: fixed; z-index: 9; pointer-events: none; font-size: 12px; }
+  #bossBar .bbTop { display: flex; justify-content: space-between; gap: 6px; white-space: nowrap; overflow: hidden; }
+  #bossBar #bbDiff { color: #aaa; }
+  #bossBar .bbBar { position: relative; height: 9px; background: #400; border: 1px solid #fff; margin-top: 2px; }
+  #bossBar .bbBar i { position: absolute; left: 0; top: 0; bottom: 0; background: #32d74b; transition: width .12s; }
+  #bossBar .bbBar b { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: rgba(255,255,255,.6); }
+  #bossBar.flash .bbBar { border-color: #ff453a; }
   #emotes { position: fixed; z-index: 9; display: flex; gap: 6px; }
   #emotes button { width: 34px; height: 30px; font-size: 14px; }
 
@@ -182,6 +196,7 @@
   <button class="hbtn" id="btnLeave">退出</button>
 </div>
 <div id="plist" class="hidden"></div>
+<div id="bossBar" class="hidden"><div class="bbTop"><span id="bbName"></span><span id="bbDiff"></span></div><div class="bbBar"><i id="bbFill"></i><b></b></div></div>
 <div id="emotes" class="hidden">
   <button class="hbtn" data-e="!">!</button>
   <button class="hbtn" data-e="♥">♥</button>

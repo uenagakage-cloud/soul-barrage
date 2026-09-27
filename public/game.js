@@ -253,7 +253,7 @@ function leave() {
   roomId = null; joinInfo = null; myId = null; G.st = 'none';
   socket.disconnect(); socket.connect();
   history.replaceState(null, '', location.pathname);
-  hide('hud'); hide('plist'); hide('emotes'); hide('feed'); hide('lobby'); hide('result'); $('feedList').innerHTML = ''; $('conn').classList.add('hidden');
+  hide('hud'); hide('plist'); hide('bossBar'); hide('emotes'); hide('feed'); hide('lobby'); hide('result'); $('feedList').innerHTML = ''; $('conn').classList.add('hidden');
   show('title'); loadTop();
 }
 $('btnLeave').onclick = () => { if (confirm('部屋から退出しますか？')) leave(); };
@@ -382,13 +382,36 @@ $('lobbyCfg').addEventListener('click', (e) => {
 
 let plistTimer = 0;
 function updatePlist() {
-  const rows = [...G.roster.values()].map(r => {
+  const list = [...G.roster.values()], row = L.portrait;
+  // 縦画面：人数に合わせてHPバーの幅を決め、1行に収める
+  const barW = row ? clamp(Math.floor((L.bs - list.length * 26) / Math.max(1, list.length)), 16, 60) : 40;
+  const rows = list.map(r => {
     const p = G.players.get(r.id) || {};
     const hp = p.hp ?? (C ? C.MAX_HP : 20);
     const pct = C ? (hp / C.MAX_HP * 100) : 100;
-    return `<div class="pr ${p.alive ? '' : 'dead'}"><span style="width:14px;display:inline-block">${heartSvg(r.color)}</span>${esc(r.name)}<span class="bar"><i style="width:${pct}%"></i></span>${r.wins ? '★' + r.wins : ''}</div>`;
+    const low = pct <= 30 ? ' low' : '';
+    return `<div class="pr ${p.alive ? '' : 'dead'}${r.id === myId ? ' me' : ''}"><span class="ph">${heartSvg(r.color)}</span>${row ? '' : esc(r.name)}<span class="bar${low}" style="width:${barW}px"><i style="width:${pct}%"></i></span>${!row && r.wins ? '★' + r.wins : ''}</div>`;
   });
   $('plist').innerHTML = rows.join('');
+  $('plist').classList.toggle('row', row);
+}
+
+// ボスのHP（ストーリー）：フィールドの外のバーに表示
+let lastBossUI = '';
+function updateBossBar() {
+  const b = G.boss, show = !!(roomId && G.md === 'story' && G.st === 'play' && b);
+  $('bossBar').classList.toggle('hidden', !show);
+  if (!show) { lastBossUI = ''; return; }
+  const pct = b.max ? Math.max(0, b.hp / b.max) : 0;
+  const key = `${b.name}|${b.stage}|${Math.round(pct * 200)}|${b.phase}|${b.flash}`;
+  if (key === lastBossUI) return;
+  lastBossUI = key;
+  $('bbName').textContent = `STAGE ${b.stage + 1}/${G.cfg[3]}  ${b.name}${b.phase === 2 ? '（本気）' : ''}`;
+  $('bbDiff').textContent = diffOf().name;
+  const fill = $('bbFill');
+  fill.style.width = (pct * 100) + '%';
+  fill.style.background = pct > 0.5 ? '#32d74b' : pct > 0.2 ? '#ffd60a' : '#ff453a';
+  $('bossBar').classList.toggle('flash', !!b.flash);
 }
 
 // ===== 入力 =====
@@ -691,17 +714,21 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   L.portrait = L.h > L.w * 1.1;
   const top = 52, hpLine = 34, msgH = 44;
-  const plist = $('plist'), em = $('emotes'), feed = $('feed');
+  const plist = $('plist'), em = $('emotes'), feed = $('feed'), bossBar = $('bossBar');
+  L.storyUI = G.md === 'story' && (G.st === 'countdown' || G.st === 'play');
   if (L.portrait) {
+    // フィールドの上：ボスのHP（ストーリーのみ）とプレイヤー全員のHP
+    const bossH = L.storyUI ? 30 : 0, plH = 22, stripH = bossH + plH;
     const ctrlH = clamp(L.h * 0.27, 150, 240);
-    const avail = L.h - top - hpLine - msgH - ctrlH - 8;
+    const avail = L.h - top - stripH - hpLine - msgH - ctrlH - 8;
     L.bs = Math.max(160, Math.min(L.w - 20, avail));
-    L.bx = (L.w - L.bs) / 2; L.by = top + Math.max(0, (avail - L.bs) / 2);
+    L.bx = (L.w - L.bs) / 2; L.by = top + stripH + Math.max(0, (avail - L.bs) / 2);
+    bossBar.style.cssText = `left:${L.bx}px;width:${L.bs}px;top:${L.by - stripH}px`;
+    plist.style.cssText = `left:${L.bx}px;width:${L.bs}px;top:${L.by - plH}px;height:${plH}px`;
     const cy = L.h - ctrlH / 2 - 4;
     L.fire = { x: L.w - 78, y: cy, r: 44 };
     L.sp = { x: L.fire.x - 72, y: cy - 46, r: 27 };
     L.stickHome = { x: 88, y: cy };
-    plist.style.cssText = `left:${L.bx + 6}px;top:${L.by + 6}px;opacity:.75`;
     em.style.cssText = `left:50%;transform:translateX(-50%);bottom:calc(6px + env(safe-area-inset-bottom))`;
     feed.style.cssText = `left:${L.bx}px;width:${L.bs}px;top:${L.by + L.bs + hpLine}px;height:${msgH}px;text-align:center`;
   } else {
@@ -710,7 +737,9 @@ function resize() {
     L.fire = { x: L.w - 86, y: L.h - 96, r: 48 };
     L.sp = { x: L.fire.x - 78, y: L.fire.y - 50, r: 30 };
     L.stickHome = { x: 100, y: L.h - 110 };
-    plist.style.cssText = `left:12px;top:${top + 6}px`;
+    const colW = Math.max(120, L.bx - 24);
+    bossBar.style.cssText = `left:12px;width:${colW}px;top:${top + 6}px`;
+    plist.style.cssText = `left:12px;top:${top + 6 + (L.storyUI ? 40 : 0)}px`;
     em.style.cssText = `right:12px;top:${top + 6}px`;
     feed.style.cssText = `left:10px;width:${Math.max(120, L.bx - 20)}px;top:${top + 80}px;height:${Math.max(60, L.h - 110 - 56 - 10 - top - 80)}px;text-align:left`;
   }
@@ -902,11 +931,6 @@ function draw() {
     ctx.font = '11px DotGothic16, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     ctx.fillStyle = isMe ? '#fff' : 'rgba(255,255,255,0.7)';
     ctx.fillText(isMe ? 'YOU' : nameOf(id), p.x, p.y - 12);
-    // 他プレイヤーのHP
-    if (!isMe) {
-      ctx.fillStyle = '#600'; ctx.fillRect(p.x - 12, p.y + 11, 24, 3);
-      ctx.fillStyle = '#ffd60a'; ctx.fillRect(p.x - 12, p.y + 11, 24 * (p.hp / C.MAX_HP), 3);
-    }
     const em = G.emotes.get(id);
     if (em && em.until > pnow) {
       ctx.fillStyle = '#fff'; ctx.fillRect(p.x + 8, p.y - 34, 30, 18);
@@ -939,7 +963,6 @@ function draw() {
     ctx.fillText(t.text, t.x, t.y);
   }
   ctx.globalAlpha = 1;
-  if (G.md === 'story' && (G.st === 'play')) drawStoryUI(now);
   ctx.restore();
 
   // 被弾フラッシュ
@@ -1205,24 +1228,6 @@ function drawBoss(b, pnow) {
   ctx.restore();
 }
 
-// ストーリーのUI（ボスのHP・ステージ・セリフ）
-function drawStoryUI(now) {
-  const b = G.boss;
-  ctx.textBaseline = 'middle';
-  if (b) {
-    ctx.font = '13px DotGothic16, monospace'; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
-    ctx.fillText(`STAGE ${b.stage + 1}/${G.cfg[3]}  ${b.name}`, 60, 14);
-    ctx.textAlign = 'right'; ctx.fillStyle = '#aaa';
-    ctx.fillText(diffOf().name, 420, 14);
-    const pct = b.max ? b.hp / b.max : 0;
-    ctx.fillStyle = '#400'; ctx.fillRect(60, 24, 360, 9);
-    ctx.fillStyle = pct > 0.5 ? '#32d74b' : pct > 0.2 ? '#ffd60a' : '#ff453a';
-    ctx.fillRect(60, 24, 360 * pct, 9);
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(60, 24, 360, 9);
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.moveTo(240, 22); ctx.lineTo(240, 35); ctx.stroke(); // 第2形態の境目
-  }
-}
-
 function drawAim(now) {
   const ready = me.cdEnd - now <= 0;
   const col = ready ? '#ffd60a' : '#888';
@@ -1341,11 +1346,10 @@ function loop(t) {
   update(dt);
   draw();
   updateMusic();
-  if (roomId && t - plistTimer > 200) {
+  updateBossBar();
+  if (roomId && (G.md === 'story' && (G.st === 'countdown' || G.st === 'play')) !== L.storyUI) resize(); // ボスHPの帯の有無
+  if (roomId && t - plistTimer > 150) {
     plistTimer = t; updatePlist(); updateLobbyNote();
-    // ストーリーではボスのHPバーと重ならないよう、縦画面のプレイヤー一覧をボックスの下側へ
-    if (L.portrait) $('plist').style.top = (G.md === 'story' && G.st !== 'lobby'
-      ? L.by + L.bs - $('plist').offsetHeight - 8 : L.by + 6) + 'px';
     // 観戦中の表示（途中参加 or 脱落）は通知エリアの固定行に
     const r = G.roster.get(myId), sticky = $('feedSticky');
     const watching = (G.st === 'play' || G.st === 'countdown') && !me.alive;
