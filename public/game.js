@@ -13,6 +13,10 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
 };
 
+// 再接続時に成績（勝利数など）を引き継ぐための端末ID
+let myToken = store.get('sb_token', '');
+if (!myToken) { myToken = Math.random().toString(36).slice(2) + Date.now().toString(36); store.set('sb_token', myToken); }
+
 // ===== 通信 =====
 const socket = io({ transports: ['websocket', 'polling'] });
 let C = null, myId = null, roomId = null, isPublic = false, joinInfo = null;
@@ -74,7 +78,7 @@ socket.on('round', () => {
 
 socket.on('s', (s) => {
   const prevSt = G.st;
-  G.st = s.st; G.su = s.su; G.rs = s.rs; G.rd = s.rd;
+  G.st = s.st; G.su = s.su; G.rs = s.rs; G.rd = s.rd; G.md = s.md;
   const seen = new Set();
   for (const [id, x, y, hp, alive, inv, cd] of s.p) {
     seen.add(id);
@@ -159,7 +163,7 @@ function join(info, isRejoin) {
   audioInit();
   const name = $('nameIn').value.trim() || 'ななし';
   store.set('sb_name', name);
-  info = { name, color: myColor, ...info };
+  info = { name, color: myColor, token: myToken, ...info };
   if (!socket.connected) { setStatus('サーバーに接続中…少し待ってね'); return; }
   setStatus('参加中…');
   socket.emit('join', info, (res) => {
@@ -177,6 +181,7 @@ function join(info, isRejoin) {
     if (!isPublic) history.replaceState(null, '', `?room=${roomId}`);
     setStatus('');
     resize();
+    if (res.state === 'play' && !isRejoin) toast('試合中のため観戦します。次の試合から参戦！');
   });
 }
 $('btnQuick').onclick = () => join({ mode: 'quick' });
@@ -197,6 +202,7 @@ function leave() {
 }
 $('btnLeave').onclick = () => { if (confirm('部屋から退出しますか？')) leave(); };
 $('btnStart').onclick = () => { socket.emit('start'); audioInit(); };
+$('btnReady').onclick = () => { socket.emit('ready'); audioInit(); };
 $('btnShare').onclick = async () => {
   const url = `${location.origin}${location.pathname}?room=${roomId}`;
   try {
@@ -227,17 +233,34 @@ function toast(t) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
 }
 
+const amHost = () => { const r = G.roster.get(myId); return !!(r && r.host); };
+
 function updateLobby() {
   if (G.st !== 'lobby') return;
-  $('lobbyList').innerHTML = [...G.roster.values()].map(p =>
-    `<div class="plrow"><span style="width:20px;display:inline-block">${heartSvg(p.color)}</span>${esc(p.name)}${p.id === myId ? '（あなた）' : ''}<span class="r">★${p.wins} / KO ${p.kills}</span></div>`).join('');
+  const list = [...G.roster.values()];
+  $('lobbyList').innerHTML = list.map(p => {
+    const tag = p.host ? '<span class="tag host">ホスト</span>'
+      : p.ready ? '<span class="tag ok">準備OK</span>' : '<span class="tag wait">待機中</span>';
+    return `<div class="plrow"><span style="width:20px;display:inline-block">${heartSvg(p.color)}</span>${esc(p.name)}${p.id === myId ? '（あなた）' : ''} ${tag}<span class="r">★${p.wins} / KO ${p.kills}</span></div>`;
+  }).join('');
+  $('lobbyCode').innerHTML = isPublic ? '' : `へやコード <b>${esc(roomId)}</b>`;
+  const mine = G.roster.get(myId);
+  const others = list.filter(p => !p.host);
+  const readyN = others.filter(p => p.ready).length;
+  // プライベート: ホストだけがスタートボタン、他は準備OKボタン / 公開: 全員準備OKボタン
+  $('btnStart').classList.toggle('hidden', isPublic || !amHost());
+  $('btnReady').classList.toggle('hidden', !isPublic && amHost());
+  $('btnStart').textContent = others.length ? `▶ スタート（準備OK ${readyN}/${others.length}）` : '▶ スタート';
+  $('btnReady').textContent = mine && mine.ready ? '✔ 準備OK（押すと取消）' : '準備OK';
+  $('btnReady').classList.toggle('primary', !!(mine && mine.ready));
 }
 function updateLobbyNote() {
   if (G.st !== 'lobby') return;
   const n = G.roster.size;
-  let t = n <= 1 ? '1人ならソロで生存記録に挑戦。2人以上で対戦！' : `${n}人で対戦！ 最後まで残った人の勝ち`;
-  if (G.su) t += `<br>あと ${Math.max(0, Math.ceil((G.su - sNow()) / 1000))} 秒で自動スタート`;
-  else if (!isPublic) t += '<br>「招待」ボタンで友達にリンクを送ろう';
+  let t = n <= 1 ? '1人ならソロで生存記録に挑戦。2人以上でバトロワ！' : `${n}人でバトロワ！ 最後まで残った人の勝ち`;
+  if (isPublic) t += G.su ? `<br>全員準備OK、または ${Math.max(0, Math.ceil((G.su - sNow()) / 1000))} 秒でスタート` : '';
+  else if (amHost()) t += '<br>みんなが揃ったらスタートを押してね。「招待」で友達にリンクを送れます';
+  else t += '<br>ホストがスタートするのを待っています';
   $('lobbyNote').innerHTML = t;
 }
 
@@ -277,37 +300,65 @@ addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   keys.add(e.code);
   if ((e.code === 'Space' || e.code === 'KeyZ' || e.code === 'KeyJ') && !e.repeat) tryFire();
-  if (e.code === 'Enter' && G.st === 'lobby' && roomId) $('btnStart').click();
+  if (e.code === 'Enter' && G.st === 'lobby' && roomId && !e.repeat) (!isPublic && amHost() ? $('btnStart') : $('btnReady')).click();
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 
-function canvasPoint(e) { return { x: e.clientX, y: e.clientY }; }
-cv.addEventListener('pointerdown', (e) => {
+// スティック入力
+// スマホは Touch Events で指ごとに追跡し、毎イベントで「その指がまだ画面にあるか」を確認する。
+// （指を離したイベントを取りこぼしても、次のタッチ操作で必ず解除される＝入りっぱなし防止）
+let firePressed = 0;
+function stickDown(id, x, y) {
   if (!roomId) return;
   audioInit();
-  const p = canvasPoint(e);
-  if (Math.hypot(p.x - L.fire.x, p.y - L.fire.y) < L.fire.r * 1.35) { tryFire(); firePressed = performance.now(); return; }
-  if (stick.id === null) {
-    stick.id = e.pointerId; stick.ox = p.x; stick.oy = p.y; stick.x = p.x; stick.y = p.y;
-    try { cv.setPointerCapture(e.pointerId); } catch {}
-  }
-});
-cv.addEventListener('pointermove', (e) => {
-  if (e.pointerId !== stick.id) return;
-  const p = canvasPoint(e);
-  stick.x = p.x; stick.y = p.y;
+  if (Math.hypot(x - L.fire.x, y - L.fire.y) < L.fire.r * 1.35) { tryFire(); firePressed = performance.now(); return; }
+  if (stick.id === null) { stick.id = id; stick.ox = stick.x = x; stick.oy = stick.y = y; stick.t = performance.now(); }
+}
+function stickMove(id, x, y) {
+  if (id !== stick.id) return;
+  stick.x = x; stick.y = y; stick.t = performance.now();
   // 指が離れすぎたら基点ごと追従（フローティングスティック）
-  const dx = stick.x - stick.ox, dy = stick.y - stick.oy, d = Math.hypot(dx, dy);
-  if (d > L.stickR * 1.6) { stick.ox = stick.x - dx / d * L.stickR * 1.6; stick.oy = stick.y - dy / d * L.stickR * 1.6; }
-});
-const endStick = (e) => { if (e.pointerId === stick.id) stick.id = null; };
-cv.addEventListener('pointerup', endStick);
-cv.addEventListener('pointercancel', endStick);
+  const dx = stick.x - stick.ox, dy = stick.y - stick.oy, d = Math.hypot(dx, dy), lim = L.stickR * 1.6;
+  if (d > lim) { stick.ox = stick.x - dx / d * lim; stick.oy = stick.y - dy / d * lim; }
+}
+function releaseStick() { stick.id = null; }
+function syncTouches(e) {
+  if (stick.id === null || stick.id === 'mouse') return;
+  for (const t of e.touches) if (t.identifier === stick.id) return;
+  releaseStick();
+}
+
+cv.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  syncTouches(e);
+  for (const t of e.changedTouches) stickDown(t.identifier, t.clientX, t.clientY);
+}, { passive: false });
+addEventListener('touchmove', (e) => {
+  syncTouches(e);
+  for (const t of e.changedTouches) stickMove(t.identifier, t.clientX, t.clientY);
+  if (e.target === cv) e.preventDefault();
+}, { passive: false });
+const touchEnd = (e) => {
+  for (const t of e.changedTouches) if (t.identifier === stick.id) releaseStick();
+  syncTouches(e);
+};
+addEventListener('touchend', touchEnd);
+addEventListener('touchcancel', touchEnd);
+
+// PC（マウス）
+cv.addEventListener('mousedown', (e) => { if (e.button === 0) stickDown('mouse', e.clientX, e.clientY); });
+addEventListener('mousemove', (e) => { if (stick.id === 'mouse') { if (!(e.buttons & 1)) releaseStick(); else stickMove('mouse', e.clientX, e.clientY); } });
+addEventListener('mouseup', () => { if (stick.id === 'mouse') releaseStick(); });
+
+// アプリ切替・通知・画面ロックなどで入力をリセット
+const resetInput = () => { releaseStick(); keys.clear(); };
+addEventListener('blur', resetInput);
+addEventListener('pagehide', resetInput);
+document.addEventListener('visibilitychange', () => { if (document.hidden) resetInput(); });
 addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('gesturestart', (e) => e.preventDefault());
-let firePressed = 0;
 
 function readInput() {
   let x = 0, y = 0;
@@ -421,6 +472,12 @@ addEventListener('resize', resize);
 resize();
 
 // ===== 更新 =====
+// バトロワのエリア縮小（サーバーと同じ式）
+function insetNow(now) {
+  if (!C || G.md !== 'versus' || G.st !== 'play') return 0;
+  return clamp((now - G.rs - C.SHRINK_START) / 1000 * C.SHRINK_RATE, 0, C.SHRINK_MAX);
+}
+
 function bulletPos(b, now) {
   const t = (now - b.t0) / 1000;
   b.t = t;
@@ -436,8 +493,9 @@ function update(dt) {
   me.moving = playing && Math.hypot(input.x, input.y) > 0.12;
 
   if (playing) {
-    me.x = clamp(me.x + input.x * C.SPEED * dt, C.SOUL_R, C.W - C.SOUL_R);
-    me.y = clamp(me.y + input.y * C.SPEED * dt, C.SOUL_R, C.H - C.SOUL_R);
+    const m = insetNow(now) + C.SOUL_R;
+    me.x = clamp(me.x + input.x * C.SPEED * dt, m, C.W - m);
+    me.y = clamp(me.y + input.y * C.SPEED * dt, m, C.H - m);
     if (now - me.lastSend > 50) { socket.volatile.emit('pos', { x: +me.x.toFixed(1), y: +me.y.toFixed(1), m: me.moving ? 1 : 0 }); me.lastSend = now; }
   }
 
@@ -616,9 +674,17 @@ function draw() {
   // 被弾フラッシュ
   if (flash > 0) { ctx.fillStyle = `rgba(255,0,0,${flash * 0.8})`; ctx.fillRect(L.bx, L.by, L.bs, L.bs); }
 
-  // ボックスの枠（Undertale風）
+  // ボックスの枠（Undertale風）。エリア縮小中は外側を赤く塗り、内側に新しい枠を描く
+  const ins = insetNow(now) * sc;
+  if (ins > 0) {
+    ctx.fillStyle = 'rgba(255,40,40,0.18)';
+    ctx.fillRect(L.bx, L.by, L.bs, ins); ctx.fillRect(L.bx, L.by + L.bs - ins, L.bs, ins);
+    ctx.fillRect(L.bx, L.by + ins, ins, L.bs - ins * 2); ctx.fillRect(L.bx + L.bs - ins, L.by + ins, ins, L.bs - ins * 2);
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+    ctx.strokeRect(L.bx - 2, L.by - 2, L.bs + 4, L.bs + 4);
+  }
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
-  ctx.strokeRect(L.bx - 2, L.by - 2, L.bs + 4, L.bs + 4);
+  ctx.strokeRect(L.bx + ins - 2, L.by + ins - 2, L.bs - ins * 2 + 4, L.bs - ins * 2 + 4);
   ctx.restore();
 
   // ---- ボックス中央のメッセージ ----
@@ -629,15 +695,20 @@ function draw() {
     ctx.fillStyle = '#ffd60a'; ctx.font = `${Math.round(L.bs * 0.25)}px DotGothic16, monospace`;
     ctx.fillText(String(n), cx, cy);
     ctx.font = '16px DotGothic16, monospace'; ctx.fillStyle = '#fff';
-    ctx.fillText(G.players.size >= 2 ? 'VERSUS - 最後の1人になれ！' : 'SOLO - 生き残れ！', cx, cy + L.bs * 0.2);
+    ctx.fillText(G.md === 'versus' ? 'BATTLE ROYALE - 最後の1人になれ！' : 'SOLO - 生き残れ！', cx, cy + L.bs * 0.2);
   } else if (G.st === 'play') {
     const el = Math.max(0, (now - G.rs) / 1000);
     ctx.font = '14px DotGothic16, monospace'; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.textAlign = 'right';
     ctx.fillText(`${el.toFixed(1)}s`, L.bx + L.bs - 8, L.by + 14);
     if (el < 1.2) { ctx.textAlign = 'center'; ctx.fillStyle = '#ffd60a'; ctx.font = `${Math.round(L.bs * 0.14)}px DotGothic16, monospace`; ctx.fillText('START!', cx, cy); }
-    if (!me.alive) {
-      ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = '15px DotGothic16, monospace';
-      ctx.fillText('観戦中… 次のラウンドを待とう', cx, L.by + L.bs - 18);
+    if (G.md === 'versus') {
+      const toShrink = (C.SHRINK_START - (now - G.rs)) / 1000;
+      ctx.textAlign = 'center'; ctx.font = '14px DotGothic16, monospace';
+      if (toShrink > 0 && toShrink <= 5) { ctx.fillStyle = '#ff453a'; ctx.fillText(`エリア縮小まで ${Math.ceil(toShrink)}`, cx, L.by + 16); }
+      else if (toShrink <= 0 && toShrink > -3) { ctx.fillStyle = '#ff453a'; ctx.fillText('エリア縮小開始！', cx, L.by + 16); }
+      const alive = [...G.players.values()].filter(p => p.alive).length;
+      ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillText(`残り ${alive}人`, L.bx + 8, L.by + L.bs - 12);
     }
   }
 
@@ -700,7 +771,17 @@ function loop(t) {
   const dt = Math.min(0.05, (t - last) / 1000); last = t;
   update(dt);
   draw();
-  if (roomId && t - plistTimer > 200) { plistTimer = t; updatePlist(); updateLobbyNote(); }
+  if (roomId && t - plistTimer > 200) {
+    plistTimer = t; updatePlist(); updateLobbyNote();
+    // 観戦バナー（途中参加 or 脱落）
+    const r = G.roster.get(myId), banner = $('specBanner');
+    const watching = (G.st === 'play' || G.st === 'countdown') && !me.alive;
+    banner.classList.toggle('hidden', !watching);
+    if (watching) {
+      banner.textContent = r && r.spec ? '観戦中 — 次の試合から参戦します' : '脱落… 観戦中（次の試合を待とう）';
+      banner.style.top = (L.by + 30) + 'px';
+    }
+  } else if (!roomId) $('specBanner').classList.add('hidden');
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

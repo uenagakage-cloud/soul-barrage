@@ -30,11 +30,14 @@ const C = {
   AUTO_DMG: 3,
   HEAL: 6,
   MAX_PLAYERS: 8,
+  SHRINK_START: 40000,     // 対戦開始からエリア縮小が始まるまで ms
+  SHRINK_RATE: 3,          // 縮小速度（片側 px/s）
+  SHRINK_MAX: 130,         // 最大縮小幅（片側 px）
 };
 const TICK = 50;              // 20Hz
 const COUNTDOWN = 3000;
 const RESULT_TIME = 6000;
-const LOBBY_AUTO = 10000;     // 結果画面後 / 公開ルームの自動スタートまで
+const LOBBY_AUTO = 15000;     // 公開ルームの自動スタートまで
 const COLORS = ['#ff2d55', '#ffd60a', '#32d74b', '#64d2ff', '#bf5af2', '#ff9f0a', '#ff6ec7', '#ffffff'];
 
 // 弾の種類
@@ -71,7 +74,10 @@ class Room {
     this.iid = 1;
     this.round = 0;
     this.state = 'lobby';
-    this.stateUntil = isPublic ? Date.now() + LOBBY_AUTO : 0; // 0 = 手動スタート待ち
+    // 公開ルームだけ自動スタート。プライベートはホストがスタートするまで待つ
+    this.stateUntil = 0;
+    this.hostId = null;
+    this.sessions = new Map(); // token -> {wins, kills}  再接続時に成績を引き継ぐ
     this.roundStart = 0;
     this.nextPattern = 0;
     this.nextItem = 0;
@@ -85,28 +91,35 @@ class Room {
   roster() {
     return [...this.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color, wins: p.wins, kills: p.kills,
+      host: p.id === this.hostId, ready: p.ready, spec: p.spectating,
     }));
   }
   sendRoster() { this.emit('roster', this.roster()); }
 
-  addPlayer(socket, name, color) {
+  addPlayer(socket, name, color, token) {
     const used = new Set([...this.players.values()].map(p => p.color));
     if (used.has(color)) color = COLORS.find(c => !used.has(c)) || color;
+    const saved = token && this.sessions.get(token);
     const p = {
-      id: socket.id, name, color,
+      id: socket.id, token, name, color,
       x: C.W / 2, y: C.H / 2, moving: false,
       hp: C.MAX_HP, alive: false, iframeUntil: 0, cdUntil: 0,
-      kills: 0, wins: 0, grazes: 0, roundKills: 0,
+      kills: saved ? saved.kills : 0, wins: saved ? saved.wins : 0, grazes: 0, roundKills: 0,
       deathAt: 0, lastPosAt: Date.now(), grazeWindow: [],
+      ready: false, spectating: false,
     };
     this.players.set(socket.id, p);
     socket.join(this.id);
+    if (!this.isPublic && (!this.hostId || (saved && saved.host && !this.players.has(this.hostId)))) this.hostId = p.id;
     if (this.state === 'countdown') {
       // カウントダウン中の参加は次のラウンドに間に合う
       p.x = rand(60, C.W - 60); p.y = rand(60, C.H - 60);
       p.hp = C.MAX_HP; p.alive = true;
       if (this.players.size >= 2) this.mode = 'versus';
       this.emit('round', { round: this.round, mode: this.mode });
+    } else if (this.state === 'play') {
+      // 試合中の途中参加は観戦。次の試合から参戦
+      p.spectating = true;
     }
     if (this.state === 'lobby' && this.isPublic && !this.stateUntil) this.stateUntil = Date.now() + LOBBY_AUTO;
     this.sendRoster();
@@ -114,13 +127,35 @@ class Room {
   }
 
   removePlayer(id) {
+    const p = this.players.get(id);
+    if (!p) return;
+    if (p.token) this.sessions.set(p.token, { wins: p.wins, kills: p.kills, host: id === this.hostId });
     this.players.delete(id);
+    if (this.hostId === id) {
+      const next = this.players.values().next().value;
+      this.hostId = next ? next.id : null;
+    }
     this.sendRoster();
-    if (this.players.size === 0) this.emptySince = Date.now();
+    if (this.players.size === 0) { this.emptySince = Date.now(); if (this.isPublic) this.stateUntil = 0; }
+    else this.checkAllReady();
   }
 
-  requestStart() {
-    if (this.state === 'lobby') this.startCountdown();
+  // プライベート: ホストのみスタート可能 / 公開: 全員「準備OK」か時間切れでスタート
+  requestStart(p) {
+    if (this.state !== 'lobby') return;
+    if (!this.isPublic && p.id === this.hostId) this.startCountdown();
+  }
+
+  toggleReady(p) {
+    if (this.state !== 'lobby') return;
+    p.ready = !p.ready;
+    this.sendRoster();
+    this.checkAllReady();
+  }
+
+  checkAllReady() {
+    if (this.state !== 'lobby' || !this.isPublic || this.players.size === 0) return;
+    if ([...this.players.values()].every(p => p.ready)) this.startCountdown();
   }
 
   startCountdown() {
@@ -138,9 +173,17 @@ class Room {
       p.y = C.H / 2 + Math.sin(a) * rr;
       p.hp = C.MAX_HP; p.alive = true; p.iframeUntil = 0; p.cdUntil = 0;
       p.grazes = 0; p.roundKills = 0; p.deathAt = 0;
+      p.ready = false; p.spectating = false;
     });
     this.mode = list.length >= 2 ? 'versus' : 'solo';
     this.emit('round', { round: this.round, mode: this.mode });
+    this.sendRoster();
+  }
+
+  // バトロワのエリア縮小：対戦モードでは一定時間後にボックスが縮んでいく
+  inset(now) {
+    if (this.mode !== 'versus' || this.state !== 'play') return 0;
+    return clamp((now - this.roundStart - C.SHRINK_START) / 1000 * C.SHRINK_RATE, 0, C.SHRINK_MAX);
   }
 
   startPlay(now) {
@@ -218,7 +261,8 @@ class Room {
       if (now >= this.nextItem) {
         this.nextItem = now + rand(7000, 11000);
         if (this.items.length < 2) {
-          this.items.push({ id: this.iid++, type: Math.random() < 0.6 ? 'heal' : 'charge', x: rand(40, C.W - 40), y: rand(40, C.H - 40), until: now + 12000 });
+          const m = 40 + this.inset(now);
+          this.items.push({ id: this.iid++, type: Math.random() < 0.6 ? 'heal' : 'charge', x: rand(m, C.W - m), y: rand(m, C.H - m), until: now + 12000 });
         }
       }
       this.items = this.items.filter(it => it.until > now);
@@ -239,12 +283,12 @@ class Room {
     } else if (this.state === 'result') {
       if (now >= this.stateUntil) {
         this.state = 'lobby';
-        this.stateUntil = now + LOBBY_AUTO;
+        this.stateUntil = this.isPublic ? now + LOBBY_AUTO : 0;
       }
     }
 
     this.emit('s', {
-      st: this.state, su: this.stateUntil, rs: this.roundStart, rd: this.round, now,
+      st: this.state, su: this.stateUntil, rs: this.roundStart, rd: this.round, md: this.mode, now,
       p: [...this.players.values()].map(p => [p.id, Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10, p.hp, p.alive ? 1 : 0, Math.max(0, p.iframeUntil - now), Math.max(0, p.cdUntil - now)]),
       it: this.items.map(it => [it.id, it.type, Math.round(it.x), Math.round(it.y)]),
     });
@@ -255,8 +299,9 @@ class Room {
     if (!p.alive || this.state !== 'play') return;
     const dt = Math.max(0.02, (now - p.lastPosAt) / 1000);
     p.lastPosAt = now;
-    x = clamp(+x || 0, C.SOUL_R, C.W - C.SOUL_R);
-    y = clamp(+y || 0, C.SOUL_R, C.H - C.SOUL_R);
+    const m = Math.max(0, this.inset(now) - 4) + C.SOUL_R; // 通信遅延ぶん少し甘めに
+    x = clamp(+x || 0, m, C.W - m);
+    y = clamp(+y || 0, m, C.H - m);
     // スピードハックの簡易対策
     const maxD = C.SPEED * Math.min(dt, 0.5) * 1.6 + 8;
     const dx = x - p.x, dy = y - p.y, dist = Math.hypot(dx, dy);
@@ -453,17 +498,22 @@ io.on('connection', (socket) => {
     }
     if (r.players.size >= C.MAX_PLAYERS) return cb && cb({ ok: false, error: '満員です（最大8人）' });
     room = r;
-    me = r.addPlayer(socket, name, color);
-    cb && cb({ ok: true, id: socket.id, room: r.id, isPublic: r.isPublic, C, result: r.result });
+    const token = typeof data.token === 'string' ? data.token.slice(0, 40) : null;
+    me = r.addPlayer(socket, name, color, token);
+    cb && cb({ ok: true, id: socket.id, room: r.id, isPublic: r.isPublic, C, state: r.state });
   });
 
-  socket.on('start', () => { if (room) room.requestStart(); });
+  socket.on('start', () => { if (room && me) room.requestStart(me); });
+  socket.on('ready', () => { if (room && me) room.toggleReady(me); });
   socket.on('pos', (d) => { if (room && me && d) room.onPos(me, d.x, d.y, d.m, Date.now()); });
   socket.on('hit', (bid) => { if (room && me) room.onHit(me, +bid, Date.now()); });
   socket.on('fire', () => { if (room && me) room.onFire(me, Date.now()); });
   socket.on('graze', () => { if (room && me) room.onGraze(me, Date.now()); });
   socket.on('emote', (e) => {
-    if (room && me && ['!', '?', '♥', 'GG', 'w'].includes(e)) room.emit('fx', { t: 'emote', id: me.id, e });
+    const now = Date.now();
+    if (!room || !me || now - (me.lastEmote || 0) < 800) return; // 連打対策
+    me.lastEmote = now;
+    if (['!', '?', '♥', 'GG', 'w'].includes(e)) room.emit('fx', { t: 'emote', id: me.id, e });
   });
 
   socket.on('disconnect', () => {
