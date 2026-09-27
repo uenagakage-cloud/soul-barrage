@@ -104,7 +104,7 @@ const BOSSES = [
       intro: ['* ピョンタが ぴょこんと とびだした！', '* 「ケロケロ！ いっしょに あそぼうケロ！」'],
       phase2: '* ピョンタは ほっぺを ふくらませた！',
       defeat: '* ピョンタは いけに かえっていった…',
-      patterns: [['fountain', 3], ['bossDrip', 2], ['ring', 2]],
+      patterns: [['fountain', 2], ['bossDrip', 2], ['ring', 2], ['bossAim', 1]],
       p2: [['bossBoomerang', 2], ['bossRing', 2]],
     },
     {
@@ -320,6 +320,16 @@ const BOSSES = [
   ],
 ];
 
+// ===== ストーリー後半ステージの強化 =====
+// d: 攻撃の強さ（弾数・弾速）の上乗せ / gap: 攻撃の間隔の倍率 / layer: 別の攻撃を重ねる確率 [第1形態, 第2形態]
+// hp: ボスHPの倍率 / move: ボスの移動速度の倍率 / press: 攻撃の合間に端から飛んでくる自機狙い弾の間隔 ms [第1, 第2]
+// rage: HP25%以下で「最後のあがき」（必ず2つ重ね＋50%で3つ目、さらに速く）
+const STAGE_BOOST = [
+  null, null, null,
+  { d: 0.6, gap: 0.7, layer: [0.3, 0.55], hp: 1.1, move: 1.15, press: [2600, 1900], rage: false }, // STAGE 4
+  { d: 1.2, gap: 0.5, layer: [0.6, 0.9], hp: 1.25, move: 1.3, press: [1800, 1300], rage: true },   // STAGE 5
+];
+
 let highScores = []; // ソロ生存時間のトップ10（メモリ保持。サーバー再起動でリセット）
 function submitScore(name, ms, diff) {
   highScores.push({ name, ms, diff: DIFFS[diff].name, at: Date.now() });
@@ -493,10 +503,10 @@ class Room {
   startStage(now) {
     const def = pick(BOSSES[this.storyStage]); // 候補5体からランダム
     const n = Math.max(1, [...this.players.values()].length);
-    const lastStage = this.storyStage === BOSSES.length - 1;
-    const hp = Math.round(def.hp * this.dp.bossHp * (0.6 + 0.4 * n) * (lastStage ? 1.25 : 1)); // 人数が多いほどボスも硬い。最終ステージはさらに1.25倍
+    const boost = STAGE_BOOST[this.storyStage] || null;
+    const hp = Math.round(def.hp * this.dp.bossHp * (0.6 + 0.4 * n) * (boost ? boost.hp : 1)); // 人数が多いほどボスも硬い。後半ステージはさらに上乗せ
     this.lastBossName = def.name;
-    this.boss = { def, hp, max: hp, last: lastStage, rage: false, nextPress: now + 4000, t0: now, phase: 1, x: W / 2, y: def.move.y, flashUntil: 0, deadAt: 0, stageStart: now };
+    this.boss = { def, hp, max: hp, boost, rage: false, nextPress: now + 4000, t0: now, phase: 1, x: W / 2, y: def.move.y, flashUntil: 0, deadAt: 0, stageStart: now };
     // 脱落者・途中参加者も復活し、全員全回復して次のボスへ
     const list = [...this.players.values()];
     list.forEach((p, i) => {
@@ -516,7 +526,7 @@ class Room {
 
   bossPos(now) {
     const m = this.boss.def.move, t = (now - this.boss.t0) / 1000;
-    const k = (this.boss.phase === 2 ? 1.4 : 1) * (this.boss.last ? 1.3 : 1) * (this.boss.rage ? 1.2 : 1); // 最終ステージ・最後のあがきは速い
+    const k = (this.boss.phase === 2 ? 1.4 : 1) * (this.boss.boost ? this.boss.boost.move : 1) * (this.boss.rage ? 1.2 : 1); // 後半ステージ・最後のあがきは速い
     const x = W / 2 + Math.sin(t * m.fx * k) * m.ax, y = m.y + Math.sin(t * m.fy * k) * m.ay;
     if (!this.dp.roam) return { x, y };
     // 難易度「神」：8の字（リサージュ曲線）でフィールド全体を動き回る。
@@ -563,15 +573,16 @@ class Room {
       b.phase = 2;
       this.talk(b.def.phase2, 2000, now);
     }
-    if (b.last && !b.rage && b.hp > 0 && b.hp <= b.max / 4) {
+    const bo = b.boost;
+    if (bo && bo.rage && !b.rage && b.hp > 0 && b.hp <= b.max / 4) {
       // 最終ステージ：HP25%以下で「最後のあがき」。攻撃がさらに重なり、動きも速くなる
       b.rage = true;
       this.talk(`* ${b.def.name}は さいごの ちからを ふりしぼった！`, 2200, now);
       this.emit('fx', { t: 'rage', x: b.x, y: b.y, color: b.def.color });
     }
-    if (b.last && !b.deadAt && now >= b.nextPress && now >= this.nextPatternStart) {
-      // 最終ステージ：攻撃の合間も、フィールドの端から自機狙い弾が飛んでくる
-      b.nextPress = now + (b.rage ? 900 : b.phase === 2 ? 1300 : 1800);
+    if (bo && !b.deadAt && now >= b.nextPress && now >= this.nextPatternStart) {
+      // 後半ステージ：攻撃の合間も、フィールドの端から自機狙い弾が飛んでくる
+      b.nextPress = now + (b.rage ? 900 : bo.press[b.phase === 2 ? 1 : 0]);
       const targets = this.alivePlayers();
       if (targets.length) {
         const tgt = pick(targets), side = Math.floor(Math.random() * 4);
@@ -640,13 +651,13 @@ class Room {
       const b = this.boss;
       if (!b || b.deadAt) { this.nextPattern = now + 500; return; }
       const p2 = b.phase === 2;
-      const last = this.storyStage === BOSSES.length - 1; // ステージ5（最終ステージ）
-      d = 1.3 + this.storyStage * 0.3 + (p2 ? 0.5 : 0) + (last ? 1.2 : 0) + (b.rage ? 0.5 : 0);
+      const bo = b.boost; // ステージ4・5の強化設定（STAGE_BOOST）
+      d = 1.3 + this.storyStage * 0.3 + (p2 ? 0.5 : 0) + (bo ? bo.d : 0) + (b.rage ? 0.5 : 0);
       pool = p2 ? [...b.def.patterns, ...b.def.p2] : b.def.patterns;
-      gap = Math.max(last ? 200 : 350, (1500 - this.storyStage * 100 - (p2 ? 250 : 0)) * (last ? (b.rage ? 0.4 : 0.5) : 1));
-      // 最終ステージは別の攻撃を同時に重ねてくる（通常60%、第2形態90%、最後のあがきは必ず2つ＋50%で3つ目）
-      if (last) {
-        const layers = (b.rage || Math.random() < (p2 ? 0.9 : 0.6) ? 1 : 0) + (b.rage && Math.random() < 0.5 ? 1 : 0);
+      gap = Math.max(bo ? 200 : 350, (1500 - this.storyStage * 100 - (p2 ? 250 : 0)) * (bo ? (b.rage ? 0.4 : bo.gap) : 1));
+      // 後半ステージは別の攻撃を同時に重ねてくる（最後のあがきは必ず2つ＋50%で3つ目）
+      if (bo) {
+        const layers = (b.rage || Math.random() < bo.layer[p2 ? 1 : 0] ? 1 : 0) + (b.rage && Math.random() < 0.5 ? 1 : 0);
         const sp2 = Math.min(1.9, 0.85 + d * 0.12) * this.dp.speed;
         for (let L = 0; L < layers; L++) {
           const other = pool[Math.floor(Math.random() * pool.length)][0];
@@ -897,15 +908,22 @@ const PATTERNS = {
     room.spawn(list);
     return 600 + shooters * 300;
   },
-  // 下から放物線で噴き上がる
+  // 下から放物線で噴き上がる（避けやすく調整：数を減らし、間隔を空け、プレイヤーから離れた所から、予告を長めに）
   fountain(room, now, d, sp) {
-    const n = room.dn(10 + d * 3), list = [];
-    const cx = rand(120, W - 120);
+    const n = Math.min(12, room.dn(5 + d * 1.5)), list = [];
+    // 噴き出し口は、生存プレイヤーからいちばん離れた候補地点
+    const players = room.alivePlayers();
+    let cx = rand(90, W - 90), best = -1;
+    for (let k = 0; k < 6; k++) {
+      const x = rand(90, W - 90), dist = players.length ? Math.min(...players.map(p => Math.abs(p.x - x))) : 0;
+      if (dist > best) { best = dist; cx = x; }
+    }
+    const g = 240 * Math.min(sp, 1.3); // 重力（速くなりすぎないよう上限）
     for (let i = 0; i < n; i++) {
-      list.push({ x: cx + rand(-30, 30), y: H + 10, vx: rand(-110, 110), vy: -rand(330, 420), ay: 260 * sp, r: 6, t0: now + 700 + i * 70, warn: i === 0 });
+      list.push({ x: cx + rand(-16, 16), y: H + 10, vx: rand(-70, 70), vy: -rand(290, 350), ay: g, r: 5, t0: now + 1100 + i * 150, warn: i % 4 === 0 });
     }
     room.spawn(list);
-    return 700 + n * 70;
+    return 1100 + n * 150;
   },
   // 回転する渦巻き
   spiral(room, now, d, sp, origin) {
@@ -1087,7 +1105,7 @@ const PATTERNS = {
     for (let k = 0; k < rocks; k++) {
       const x = rand(30, W - 30), t0 = now + 800 + k * 200;
       list.push({ x, y: -20, vx: 0, vy: 150 * sp, ay: 200 * sp, r: 13, t0, warn: true, kind: K.BIG });
-      for (let i = 0; i < 3; i++) list.push({ x: x + rand(-20, 20), y: H + 10, vx: rand(-90, 90), vy: -rand(220, 300), ay: 300 * sp, r: 5, t0: t0 + 700 });
+      for (let i = 0; i < 2; i++) list.push({ x: x + rand(-20, 20), y: H + 10, vx: rand(-70, 70), vy: -rand(190, 250), ay: 300 * Math.min(sp, 1.3), r: 5, t0: t0 + 750 });
     }
     room.spawn(list);
     return 800 + rocks * 200 + 600;
