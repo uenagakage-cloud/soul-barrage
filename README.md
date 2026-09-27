@@ -45,5 +45,5 @@ The difficulty numbers are in `DIFFS` in `server.js`. Boss HP, lines and attack 
 ## BGM
 
 Each boss has its own chiptune in `public/music.js`, generated live in the browser with Web Audio (no audio files).
-Each song loops an A section (4 bars) → B section (4 bars). The melody, chords, bass and drums are written as text, so it's easy to edit or add songs. In the second form the tempo rises and the key goes up a semitone.
+Each song loops A section → B section → C section (4 bars each, 12 bars total). The C section is a bridge with half-time drums, ending in a snare roll back into the A section. The melody, chords, bass and drums are written as text, so it's easy to edit or add songs. In the second form the tempo rises and the key goes up a semitone.
 You can listen to every song in the in-game settings (⚙) under "サウンドテスト" (sound test).
