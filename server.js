@@ -24,8 +24,8 @@ const C = {
   SHOT_CD: 2000,           // プレイヤーショット（狙い撃ち）のクールタイム ms
   GRAZE_CUT: 250,          // グレイズ1回でクールタイム短縮 ms
   GRAZE_R: 14,             // グレイズ判定の追加半径
-  SHOT_N: 5,               // 狙い撃ちの弾数（扇状）
-  SHOT_SPREAD: 0.5,        // 扇の開き（ラジアン、約29度）
+  SHOT_N: 3,               // 1回のショットで連射する単発弾の数
+  SHOT_INTERVAL: 140,      // 連射の間隔 ms
   SHOT_SPEED: 290,
   SHOT_DMG: 4,
   AUTO_DMG: 3,
@@ -328,7 +328,7 @@ class Room {
     }
   }
 
-  // 狙い撃ち：指定角度に扇状の弾を発射。角度がなければ一番近い敵を自動で狙う
+  // 狙い撃ち：指定角度に単発弾を連射。角度がなければ一番近い敵を自動で狙う
   onFire(p, now, angle) {
     if (!p.alive || this.state !== 'play' || now < p.cdUntil) return;
     p.cdUntil = now + C.SHOT_CD;
@@ -342,13 +342,16 @@ class Room {
       }
       a0 = best ? Math.atan2(best.y - p.y, best.x - p.x) : -Math.PI / 2;
     }
-    const list = [];
+    // 単発を SHOT_INTERVAL ごとに連射。2発目以降はその時点の自分の位置から撃つ
+    const round = this.round;
+    const shoot = () => {
+      if (!p.alive || this.state !== 'play' || this.round !== round || !this.players.has(p.id)) return;
+      this.spawn([{ x: p.x, y: p.y, vx: Math.cos(a0) * C.SHOT_SPEED, vy: Math.sin(a0) * C.SHOT_SPEED, r: 6, t0: Date.now() + 40, life: 2500, kind: K.SHOT, owner: p.id }]);
+      this.emit('fx', { t: 'fire', id: p.id, x: p.x, y: p.y, a: a0 });
+    };
     for (let i = 0; i < C.SHOT_N; i++) {
-      const a = a0 + (C.SHOT_N > 1 ? (i / (C.SHOT_N - 1) - 0.5) * C.SHOT_SPREAD : 0);
-      list.push({ x: p.x, y: p.y, vx: Math.cos(a) * C.SHOT_SPEED, vy: Math.sin(a) * C.SHOT_SPEED, r: 6, t0: now + 40, life: 2500, kind: K.SHOT, owner: p.id });
+      if (i === 0) shoot(); else setTimeout(shoot, i * C.SHOT_INTERVAL);
     }
-    this.spawn(list);
-    this.emit('fx', { t: 'fire', id: p.id, x: p.x, y: p.y, a: a0 });
   }
 
   onGraze(p, now) {

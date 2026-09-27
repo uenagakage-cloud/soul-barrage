@@ -832,10 +832,8 @@ function drawAim(now) {
     ctx.restore(); return;
   }
   if (Math.hypot(aim.x - L.fire.x, aim.y - L.fire.y) <= AIM_TH) { ctx.restore(); return; } // キャンセル位置
-  const len = 230, half = C.SHOT_SPREAD / 2;
-  ctx.globalAlpha = 0.25; ctx.fillStyle = col;
-  ctx.beginPath(); ctx.moveTo(me.x, me.y);
-  ctx.arc(me.x, me.y, len, aim.angle - half, aim.angle + half); ctx.closePath(); ctx.fill();
+  // 単発の弾道を1本の線で表示
+  const len = 230;
   ctx.globalAlpha = 0.9; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
   ctx.beginPath(); ctx.moveTo(me.x, me.y); ctx.lineTo(me.x + Math.cos(aim.angle) * len, me.y + Math.sin(aim.angle) * len); ctx.stroke();
   ctx.restore();
