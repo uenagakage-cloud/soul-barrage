@@ -1,200 +1,203 @@
 // SOUL BARRAGE - ボスごとの専用BGM（Web Audio でその場で演奏するチップチューン。音声ファイル不要）
 //
-// 曲データの書き方
-//   mel  : メロディ。1小節 = 16トークン（16分音符）。'C5' などの音名 / '-' 前の音を伸ばす / '.' 休符
-//   chords: 小節ごとのコード（ベースと分散和音を自動生成）。'Am' 'F' 'E' 'C+'(オーギュメント) 'Bdim' など
-//   bass : ベースの刻み方 pump / pump16 / oompah / gallop / long / octave / staccato / drone
-//   drm  : ドラム16ステップ。k=キック s=スネア h=ハイハット .=なし
-//   arp  : 分散和音の音色（null なら無し）
-//   第2形態（ボスのHPが半分以下）ではテンポが上がり、半音上に転調する
+// 曲データの書き方（1小節 = 16トークン = 16分音符×16）
+//   mel   : メロディ。'C5' などの音名 / '-' 前の音を伸ばす / '.' 休符
+//   chords: 小節ごとのコード（ベース・ギター・分散和音を自動生成）。'Am' 'F' 'C+' 'Bdim' など
+//   gtr   : 歪んだパワーコード（ギター）の刻み。X=強く / x=短く / -=伸ばす / .=なし
+//   bass  : ベースの刻み方 drive / rock16 / syncop / oompah / halftime
+//   drm   : ドラム。k=キック s=スネア h=ハイハット o=オープンハイハット t=タム .=なし
+//   lead  : メロディの音色 saw2(厚いノコギリ波) / pulse12・pulse25(細いパルス) / square / triangle
+//   harm  : 2周目以降に重ねるハモリの音程（半音。-5 = 4度下）
+// 演奏中の変化：ループの頭でクラッシュ、偶数ループはハモリ追加、4小節目にドラムのフィル。
+// 第2形態（ボスのHPが半分以下）ではテンポが上がり、半音上に転調する。
 (() => {
 'use strict';
 
 const SONGS = {
   // ===== STAGE 1 =====
   slime: {
-    title: 'スライミー「ぷるぷるマーチ」',
-    bpm: 132, lead: 'square', leadVol: 0.05, bassWave: 'triangle', bass: 'pump', arp: null,
-    chords: ['C', 'Am', 'F', 'G'],
+    title: 'スライミー「ゲル・ランペイジ」', bpm: 156, lead: 'pulse25', leadVol: 0.05, harm: -5,
+    chords: ['Em', 'C', 'D', 'B'], bass: 'syncop', arp: null,
     mel: [
-      'C5 . E5 G5 . E5 C5 . D5 . E5 . D5 . C5 .',
-      'A4 . C5 E5 . C5 A4 . B4 . C5 . B4 . A4 .',
-      'F4 . A4 C5 . A4 F4 . G4 . A4 . C5 . F5 .',
-      'G5 - F5 - E5 - D5 - G4 . B4 . D5 . G5 .',
+      'E5 . E5 G5 . E5 A5 . G5 . E5 . D5 E5 . .',
+      'C5 . C5 E5 . C5 G5 . F#5 . E5 . D5 . B4 .',
+      'D5 . D5 F#5 . D5 A5 . B5 . A5 . F#5 . D5 .',
+      'D#5 . F#5 . B5 . A5 G5 F#5 . D#5 . B4 . . .',
     ],
-    drm: 'k . h . s . h . k . h k s . h .',
+    gtr: 'X . . x . x x . X . . x . x . x',
+    drm: 'k . h . s . h k . k h . s . h h',
   },
   ghost: {
-    title: 'フワリン「よるのワルツ」',
-    bpm: 108, lead: 'triangle', leadVol: 0.09, vib: 6, bassWave: 'triangle', bass: 'long', arp: 'triangle',
-    chords: ['Am', 'Am', 'Dm', 'E'],
+    title: 'フワリン「ファントム・ラン」', bpm: 164, lead: 'saw2', leadVol: 0.03, echo: true, harm: -5,
+    chords: ['Am', 'F', 'G', 'E'], bass: 'drive', arp: null,
     mel: [
-      'A4 - - C5 - - E5 - - D5 - - C5 - B4 -',
-      'A4 - - - - - E4 - - A4 - - C5 - - -',
-      'D5 - - F5 - - A5 - - G5 - - F5 - E5 -',
-      'E5 - - D5 - - C5 - - B4 - - G#4 - - -',
+      'A5 . . E5 . . A5 . C6 . B5 . A5 . G5 .',
+      'F5 . . C5 . . F5 . A5 . G5 . F5 . E5 .',
+      'G5 . . D5 . . G5 . B5 . A5 . G5 . F5 .',
+      'E5 . G#5 . B5 . E6 . D6 . B5 . G#5 . E5 .',
     ],
-    drm: '. . . . . . h . . . . . . . h .',
+    gtr: 'X . x . X . x . X . x . X . x x',
+    drm: 'k . h h s . h . k k h . s . h o',
   },
   frog: {
-    title: 'ピョンタ「ケロケロポルカ」',
-    bpm: 152, lead: 'square', leadVol: 0.045, bassWave: 'square', bassVol: 0.035, bass: 'oompah', arp: null,
-    chords: ['F', 'Bb', 'C', 'F'],
+    title: 'ピョンタ「ジャンピング・ビート」', bpm: 170, lead: 'pulse12', leadVol: 0.05, harm: -3,
+    chords: ['Dm', 'G', 'Dm', 'C'], bass: 'rock16', arp: null,
     mel: [
-      'F5 . . C5 F5 . A5 . G5 . F5 . D5 . C5 .',
-      'Bb4 . D5 . F5 . D5 . Bb4 . C5 . D5 . . .',
-      'C5 . E5 . G5 . E5 . C5 . G4 . C5 . E5 .',
-      'F5 . A5 . C6 . A5 . F5 . . . F4 . . .',
+      'D5 . F5 D5 . G5 . A5 . . C6 A5 . G5 F5 .',
+      'G5 . B5 G5 . A5 . B5 . . D6 B5 . A5 G5 .',
+      'D5 . F5 D5 . G5 . A5 . C6 . A5 . F5 . D5',
+      'E5 . G5 . C6 . . B5 . G5 . E5 . C5 . .',
     ],
-    drm: 'k . . h s . h . k . k h s . h .',
+    gtr: 'x x . x x . x . x x . x X . . .',
+    drm: 'k . h k s . h . k . h k s . h h',
   },
   // ===== STAGE 2 =====
   knight: {
-    title: 'ホネナイト「カタカタ騎士道」',
-    bpm: 150, lead: 'square', leadVol: 0.05, bassWave: 'triangle', bass: 'gallop', arp: null,
-    chords: ['Dm', 'Dm', 'Bb', 'C'],
+    title: 'ホネナイト「ボーン・クラッシャー」', bpm: 176, lead: 'square', leadVol: 0.04, harm: -5,
+    chords: ['Dm', 'Bb', 'C', 'A'], bass: 'rock16', arp: null,
     mel: [
-      'D5 . A4 . D5 . F5 . E5 . D5 . A4 . C5 .',
-      'D5 . A4 . D5 . F5 . G5 . F5 . E5 . C5 .',
-      'Bb4 . D5 . F5 . D5 . Bb4 . A4 . Bb4 . D5 .',
-      'C5 . E5 . G5 . E5 . C5 - - - E5 . C#5 .',
+      'D5 D5 . D5 F5 . E5 . D5 . C5 . A4 . C5 .',
+      'Bb4 Bb4 . Bb4 D5 . C5 . Bb4 . A4 . F4 . A4 .',
+      'C5 C5 . C5 E5 . D5 . C5 . Bb4 . G4 . Bb4 .',
+      'A4 . C#5 . E5 . A5 . G5 . E5 . C#5 . E5 .',
     ],
-    drm: 'k h h h s h h h k h k h s h h h',
+    gtr: 'X . x x . x x . X . x x . x x x',
+    drm: 'k k h . s . h k k . h k s . h h',
   },
   spider: {
-    title: 'アラク「あみのなかで」',
-    bpm: 128, lead: 'square', leadVol: 0.045, stacc: true, bassWave: 'triangle', bass: 'staccato', arp: null,
-    chords: ['Em', 'Em', 'C', 'B'],
+    title: 'アラク「ヴェノム・ウェブ」', bpm: 150, lead: 'pulse25', leadVol: 0.05, stacc: true, harm: -5,
+    chords: ['Em', 'F', 'Em', 'D'], bass: 'syncop', arp: null,
     mel: [
-      'E5 . . F5 E5 . . D#5 E5 . G5 . F#5 . E5 .',
-      'B4 . . C5 B4 . . A#4 B4 . D5 . C5 . B4 .',
-      'C5 . E5 . G5 . E5 . C5 . . B4 C5 . E5 .',
-      'D#5 . F#5 . A5 . F#5 . D#5 . B4 . . . . .',
+      'E5 . F5 . E5 . B4 . E5 . F5 . G5 . F5 .',
+      'F5 . G5 . F5 . C5 . F5 . G5 . A5 . G5 .',
+      'E5 . F5 . E5 . B4 . G5 . F5 . E5 . B4 .',
+      'D5 . E5 . F#5 . A5 . D6 . C6 . A5 . F5 .',
     ],
-    drm: 'k . . . s . . h k . . . s . h h',
+    gtr: 'X . . x . . X . . x . . X . x .',
+    drm: 'k . h . s . h k . . h k s . h .',
   },
   snowman: {
-    title: 'ユキダルマン「ゆきのベル」',
-    bpm: 120, lead: 'triangle', leadVol: 0.1, bell: true, bassWave: 'triangle', bass: 'long', arp: 'triangle', arpOct: 6,
-    chords: ['G', 'Em', 'C', 'D'],
+    title: 'ユキダルマン「ブリザード・ドライブ」', bpm: 168, lead: 'pulse12', leadVol: 0.05, echo: true, harm: -5,
+    chords: ['Bm', 'G', 'A', 'F#'], bass: 'drive', arp: 'triangle', arpOct: 6,
     mel: [
-      'B5 . G5 . D5 . G5 . B5 . A5 . G5 . . .',
-      'G5 . E5 . B4 . E5 . G5 . F#5 . E5 . . .',
-      'E5 . C5 . G4 . C5 . E5 . D5 . C5 . E5 .',
-      'D5 . F#5 . A5 . F#5 . D5 - - - . . . .',
+      'B5 . F#5 . D5 . F#5 . B5 . C#6 . D6 . C#6 .',
+      'B5 . G5 . D5 . G5 . B5 . A5 . G5 . F#5 .',
+      'A5 . E5 . C#5 . E5 . A5 . B5 . C#6 . E6 .',
+      'F#5 . A#5 . C#6 . F#6 . E6 . C#6 . A#5 . F#5 .',
     ],
-    drm: 'h . h . s . h . h . h . s . h h',
+    gtr: 'X . x . x . X . x . X . x . x .',
+    drm: 'k . h h s . h h k . h h s . h o',
   },
   // ===== STAGE 3 =====
   witch: {
-    title: 'ヒノカ「ほのおのほうき」',
-    bpm: 162, lead: 'square', leadVol: 0.045, bassWave: 'triangle', bass: 'pump', arp: 'square',
-    chords: ['Am', 'F', 'E', 'Am'],
+    title: 'ヒノカ「インフェルノ・ブルーム」', bpm: 184, lead: 'saw2', leadVol: 0.03, harm: -5,
+    chords: ['Am', 'F', 'Dm', 'E'], bass: 'rock16', arp: null,
     mel: [
-      'A5 . G#5 A5 . E5 . C5 . E5 . A5 . B5 . C6',
-      'A5 . F5 . C5 . F5 . A5 . G5 . F5 . E5 .',
-      'G#5 . B5 . E6 . B5 . G#5 . E5 . D5 . B4 .',
-      'A4 . C5 . E5 . A5 - - - . . E5 . A5 .',
+      'A5 . E5 . A5 C6 . B5 . A5 . G#5 . A5 . E5',
+      'F5 . C5 . F5 A5 . G5 . F5 . E5 . F5 . C5',
+      'D5 . A4 . D5 F5 . E5 . D5 . C5 . D5 . F5',
+      'E5 . G#5 . B5 . D6 . C6 . B5 . G#5 . E5 .',
     ],
-    drm: 'k . h k s . h . k . h k s . h h',
+    gtr: 'X x . x X . x . X x . x X . x x',
+    drm: 'k h s h k h s h k h s h k h s h',
   },
   dragon: {
-    title: 'ドラコ「ちいさなつばさ」',
-    bpm: 156, lead: 'sawtooth', leadVol: 0.035, bassWave: 'square', bassVol: 0.03, bass: 'gallop', arp: null,
-    chords: ['Dm', 'Bb', 'F', 'C'],
+    title: 'ドラコ「ドラゴン・ハート」', bpm: 160, lead: 'saw2', leadVol: 0.03, echo: true, harm: -5,
+    chords: ['Cm', 'Ab', 'Bb', 'G'], bass: 'drive', arp: null,
     mel: [
-      'D5 - - A4 D5 . F5 . A5 - - G5 F5 . E5 .',
-      'F5 - - D5 Bb4 . D5 . F5 - - E5 D5 . C5 .',
-      'C5 - - F5 A5 . C6 . A5 - - G5 F5 . A5 .',
-      'G5 - - - E5 - - - C5 . E5 . G5 . C6 .',
+      'C5 - - G4 C5 . Eb5 . G5 - - F5 Eb5 . D5 .',
+      'Eb5 - - C5 Ab4 . C5 . Eb5 - - D5 C5 . Bb4 .',
+      'Bb4 - - D5 F5 . Bb5 . Ab5 - - G5 F5 . D5 .',
+      'G5 - - - B4 - - - D5 . F5 . G5 . B5 .',
     ],
-    drm: 'k . h . s . h . k k h . s . h k',
+    gtr: 'X - - - X - - - X - - x X . x .',
+    drm: 'k . h . s . h . k k h . s . h h',
   },
   mage: {
-    title: 'ライデン「いなずまロンド」',
-    bpm: 172, lead: 'sawtooth', leadVol: 0.035, bassWave: 'square', bassVol: 0.03, bass: 'pump16', arp: null,
-    chords: ['Em', 'D', 'C', 'B'],
+    title: 'ライデン「サンダー・ストライク」', bpm: 190, lead: 'pulse12', leadVol: 0.05, harm: -5,
+    chords: ['F#m', 'D', 'E', 'C#'], bass: 'rock16', arp: null,
     mel: [
-      'E5 E5 . G5 . E5 B5 . A5 . G5 . F#5 . E5 .',
-      'D5 D5 . F#5 . D5 A5 . G5 . F#5 . E5 . D5 .',
-      'C5 C5 . E5 . C5 G5 . F#5 . E5 . D5 . C5 .',
-      'B4 . D#5 . F#5 . B5 . A5 . F#5 . D#5 . B4 .',
+      'F#5 F#5 . A5 . F#5 C#6 . B5 . A5 . G#5 . F#5 .',
+      'D5 D5 . F#5 . D5 A5 . G#5 . F#5 . E5 . D5 .',
+      'E5 E5 . G#5 . E5 B5 . A5 . G#5 . F#5 . E5 .',
+      'C#5 . F5 . G#5 . C#6 . B5 . G#5 . F5 . C#5 .',
     ],
-    drm: 'k . h . s . h k k . h . s . h h',
+    gtr: 'x x x x X . x x x x x x X . x x',
+    drm: 'k h s h k h s h k h s h k h s h',
   },
   // ===== STAGE 4 =====
   robot: {
-    title: 'ギアロイド「ハイジョ・プロトコル」',
-    bpm: 140, lead: 'square', leadVol: 0.045, bassWave: 'square', bassVol: 0.03, bass: 'octave', arp: 'square',
-    chords: ['Cm', 'Ab', 'Bb', 'G'],
+    title: 'ギアロイド「メタル・プロトコル」', bpm: 144, lead: 'square', leadVol: 0.04, harm: -12,
+    chords: ['Cm', 'Cm', 'Ab', 'G'], bass: 'syncop', arp: 'square', arpOct: 5,
     mel: [
-      'C5 . C5 . G5 . C5 . Eb5 . C5 . G5 . Bb5 .',
-      'Ab5 . Eb5 . C5 . Eb5 . Ab5 . G5 . Eb5 . C5 .',
-      'Bb4 . D5 . F5 . Bb5 . F5 . D5 . Bb4 . D5 .',
-      'G5 . G5 . F5 . Eb5 . D5 . B4 . G4 . B4 .',
+      'C5 . . C5 . . Eb5 . . C5 . . G5 . F5 .',
+      'C5 . . C5 . . Eb5 . . G5 . . Bb5 . G5 .',
+      'Ab5 . . Ab5 . . G5 . . F5 . . Eb5 . C5 .',
+      'B4 . D5 . F5 . G5 . B5 . D6 . B5 . G5 .',
     ],
-    drm: 'k . h . s . h . k . h . s . k h',
+    gtr: 'X . . X . . X . . X . . X . X .',
+    drm: 'k . h k s . h . k . h k s k h .',
   },
   mirror: {
-    title: 'ミラージュ「かがみのゆめ」',
-    bpm: 124, lead: 'triangle', leadVol: 0.1, vib: 4, bassWave: 'triangle', bass: 'long', arp: 'triangle', arpOct: 5,
-    chords: ['C+', 'D+', 'E+', 'D+'],
+    title: 'ミラージュ「クリスタル・ミラージュ」', bpm: 150, lead: 'pulse12', leadVol: 0.05, echo: true, harm: -5,
+    chords: ['Dm', 'Bb', 'Gm', 'A'], bass: 'drive', arp: 'square', arpOct: 5,
     mel: [
-      'C6 . A#5 . G#5 . F#5 . E5 . F#5 . G#5 . A#5 .',
-      'D6 . C6 . A#5 . G#5 . F#5 - - - . . . .',
-      'E5 . G#5 . C6 . G#5 . E5 . D5 . E5 . F#5 .',
-      'G#5 - - - A#5 - - - C6 - - - . . . .',
+      'D6 . A5 . F5 . A5 . D6 . E6 . F6 . E6 .',
+      'D6 . Bb5 . F5 . Bb5 . D6 . C6 . Bb5 . A5 .',
+      'G5 . Bb5 . D6 . Bb5 . G5 . A5 . Bb5 . D6 .',
+      'C#6 . A5 . E5 . A5 . C#6 . E6 . A6 . E6 .',
     ],
-    drm: 'h . . . . . h . . . h . . . . .',
+    gtr: '. . . . X - - - . . . . X - x .',
+    drm: 'k . h . s . h . k . h . s . h h',
   },
   clown: {
-    title: 'ピエロット「おどけたサーカス」',
-    bpm: 176, lead: 'square', leadVol: 0.045, bassWave: 'triangle', bass: 'oompah', arp: null,
-    chords: ['C', 'G', 'C', 'G'],
+    title: 'ピエロット「マッド・カーニバル」', bpm: 188, lead: 'square', leadVol: 0.04, harm: -5,
+    chords: ['Em', 'Am', 'B', 'Em'], bass: 'oompah', arp: null,
     mel: [
-      'E5 D#5 E5 . C5 . G4 . A4 A#4 B4 . C5 . E5 .',
-      'D5 C#5 D5 . B4 . G4 . F5 E5 D5 . C5 . B4 .',
-      'E5 D#5 E5 . G5 . E5 . C6 B5 A5 . G5 . E5 .',
-      'D5 . G5 . F5 . D5 . C5 . . . C4 . . .',
+      'E5 D#5 E5 . G5 . B5 . A#5 B5 . G5 . E5 . .',
+      'A5 G#5 A5 . C6 . E6 . D#6 E6 . C6 . A5 . .',
+      'B5 A#5 B5 . F#5 . D#5 . F#5 . B5 . A5 . F#5 .',
+      'E5 . G5 . B5 . E6 . B5 . G5 . E5 . . .',
     ],
-    drm: 'k . s . k . s . k . s . k . s .',
+    gtr: 'X . x . X . x . X . x . X . x .',
+    drm: 'k . s . k . s h k . s . k h s s',
   },
   // ===== STAGE 5 =====
   king: {
-    title: 'ソウルキング「魂の玉座」',
-    bpm: 150, lead: 'sawtooth', leadVol: 0.035, bassWave: 'square', bassVol: 0.03, bass: 'gallop', arp: 'square',
-    chords: ['Bm', 'G', 'D', 'A'],
+    title: 'ソウルキング「キング・オブ・ソウルズ」', bpm: 172, lead: 'saw2', leadVol: 0.032, echo: true, harm: -5,
+    chords: ['Bm', 'G', 'A', 'F#'], bass: 'rock16', arp: 'square', arpOct: 5,
     mel: [
-      'B4 . D5 . F#5 - - . B5 - A5 - F#5 . E5 .',
-      'D5 . G5 . B5 - - . A5 - G5 - F#5 . D5 .',
-      'F#5 . A5 . D6 - - . C#6 - B5 - A5 . F#5 .',
-      'E5 . C#5 . A4 . C#5 . E5 . A5 . C#6 . E6 .',
+      'B4 . F#5 . B5 - - A5 B5 . D6 . C#6 . A5 .',
+      'G5 . D5 . G5 - - F#5 G5 . B5 . A5 . F#5 .',
+      'A5 . E5 . A5 - - G#5 A5 . C#6 . E6 . C#6 .',
+      'A#5 . C#6 . F#6 - - E6 C#6 . A#5 . F#5 . C#5 .',
     ],
-    drm: 'k h h h s h h k k h k h s h h h',
+    gtr: 'X . x x X . x x X . x x X x x x',
+    drm: 'k h s h k k s h k h s h k k s s',
   },
   angel: {
-    title: 'ルシエル「おちた天使の歌」',
-    bpm: 132, lead: 'triangle', leadVol: 0.11, vib: 5, bassWave: 'triangle', bass: 'long', arp: 'triangle', arpOct: 5,
-    chords: ['D', 'A', 'Bm', 'G'],
+    title: 'ルシエル「フォールン・レクイエム」', bpm: 148, lead: 'saw2', leadVol: 0.03, vib: 5, echo: true, harm: -5,
+    chords: ['F#m', 'D', 'E', 'C#'], bass: 'drive', arp: 'triangle', arpOct: 5,
     mel: [
-      'F#5 - - - A5 - D6 - C#6 - - - A5 - - -',
-      'E5 - - - A5 - C#6 - B5 - - - A5 - - -',
-      'D5 - - - F#5 - B5 - A5 - - - F#5 - - -',
-      'G5 - - - B5 - D6 - E6 - - - - - - -',
+      'F#5 - - - C#6 - A5 - F#5 - E5 - F#5 - A5 -',
+      'D6 - - - A5 - F#5 - D5 - E5 - F#5 - A5 -',
+      'E6 - - - B5 - G#5 - E5 - F#5 - G#5 - B5 -',
+      'C#6 - - - G#5 - F5 - C#5 - - - - - - -',
     ],
-    drm: 'k . . . s . . . k . k . s . . .',
+    gtr: 'X . . x . . X . . x . . X . x x',
+    drm: 'k . h . s . h k k . h . s . h h',
   },
   void: {
-    title: 'ヴォイド「なにもない」',
-    bpm: 96, lead: 'sawtooth', leadVol: 0.03, vib: 3, bassWave: 'sawtooth', bassVol: 0.025, bass: 'drone', arp: 'triangle', arpOct: 4,
-    chords: ['C#m', 'Dm', 'C#m', 'G#dim'],
+    title: 'ヴォイド「アビス」', bpm: 120, lead: 'saw2', leadVol: 0.028, vib: 3, echo: true, harm: -6,
+    chords: ['Cm', 'Db', 'Cm', 'Gb'], bass: 'halftime', arp: 'triangle', arpOct: 4,
     mel: [
-      'C#4 - - - - - - - D4 - - - - - - -',
-      'C#4 - - - - - - - G4 - - - F#4 - - -',
-      'E4 - - - D4 - - - C#4 - - - G#3 - - -',
-      'A3 - - - - - - - G#3 - - - - - - -',
+      'C5 . . . Db5 . . . C5 . . . G4 . . .',
+      'Db5 . . . F5 . . . Ab5 - - - G5 . . .',
+      'C5 . Eb5 . G5 . C6 . B5 . G5 . Eb5 . C5 .',
+      'Gb5 - - - F5 - - - Eb5 - - - Db5 - - -',
     ],
-    drm: 'k . k . . . . . . . . . . . . .',
+    gtr: 'X - - - - - x x X - - - - - x x',
+    drm: 'k . . . . . . . s . . . . . k .',
   },
 };
 
@@ -210,121 +213,208 @@ function chordOf(name) {
   const m = /^([A-G])(#|b)?(m|dim|\+)?/.exec(name);
   const root = SEMI[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
   const q = m[3] === 'm' ? [0, 3, 7] : m[3] === 'dim' ? [0, 3, 6] : m[3] === '+' ? [0, 4, 8] : [0, 4, 7];
-  return { root, tones: q.map(i => root + i) };
+  return { root, tones: q.map(i => root + i), fifth: m[3] === 'dim' ? 6 : m[3] === '+' ? 8 : 7 };
 }
+const toks = (str) => { const t = str.trim().split(/\s+/).slice(0, 16); while (t.length < 16) t.push('.'); return t; };
 
 // 曲データを「ステップごとの発音リスト」に変換
 function compile(song) {
   const bars = song.mel.length, steps = bars * 16;
-  const mel = [];
-  song.mel.forEach((bar, bi) => {
-    const toks = bar.trim().split(/\s+/).slice(0, 16);
-    while (toks.length < 16) toks.push('.');
-    toks.forEach((t, si) => mel.push({ t, i: bi * 16 + si }));
-  });
-  // メロディ：音符ごとに長さ（'-' の数）を計算
+  const mt = song.mel.flatMap(toks);
   const lead = new Array(steps).fill(null);
   for (let i = 0; i < steps; i++) {
-    const midi = midiOf(mel[i].t);
+    const midi = midiOf(mt[i]);
     if (midi == null) continue;
     let len = 1;
-    while (i + len < steps && mel[i + len].t === '-') len++;
+    while (i + len < steps && mt[i + len] === '-') len++;
     lead[i] = { midi, len };
   }
-  // ベース
-  const bass = new Array(steps).fill(null), arp = new Array(steps).fill(null);
+  const gt = toks(song.gtr), bass = new Array(steps).fill(null), gtr = new Array(steps).fill(null), arp = new Array(steps).fill(null);
   for (let b = 0; b < bars; b++) {
     const ch = chordOf(song.chords[b % song.chords.length]);
-    const r2 = 36 + ch.root, r3 = 48 + ch.root, fifth = 36 + ch.tones[2];
+    const r1 = 28 + ((ch.root + 8) % 12), r2 = r1 + 12; // ベースは E1〜D#2 あたりに収める
     for (let s = 0; s < 16; s++) {
       const i = b * 16 + s;
       let n = null;
       switch (song.bass) {
-        case 'pump': if (s % 2 === 0) n = { midi: r2, len: 1 }; break;
-        case 'pump16': n = { midi: s % 4 === 0 ? r2 : r3, len: 1 }; break;
-        case 'oompah': if (s % 4 === 0) n = { midi: r2, len: 1 }; else if (s % 4 === 2) n = { midi: fifth + 12, len: 1 }; break;
-        case 'gallop': if ([0, 2, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15].includes(s)) n = { midi: r2, len: 1 }; break;
-        case 'long': if (s === 0) n = { midi: r2, len: 8 }; else if (s === 8) n = { midi: fifth, len: 8 }; break;
-        case 'octave': if (s % 2 === 0) n = { midi: s % 4 === 0 ? r2 : r3, len: 1 }; break;
-        case 'staccato': if (s % 4 === 2) n = { midi: r2, len: 1, short: true }; break;
-        case 'drone': if (s === 0) n = { midi: 24 + ch.root, len: 16 }; break;
+        case 'drive': if (s % 2 === 0) n = { midi: s === 14 ? r2 : r1, len: 2 }; break;
+        case 'rock16': n = { midi: s % 8 === 6 ? r2 : r1, len: 1, acc: s % 4 === 0 }; break;
+        case 'syncop': if ([0, 3, 6, 8, 11, 14].includes(s)) n = { midi: s === 6 || s === 14 ? r2 : r1, len: 2 }; break;
+        case 'oompah': if (s % 4 === 0) n = { midi: r1, len: 1 }; else if (s % 4 === 2) n = { midi: r1 + ch.fifth + 12, len: 1 }; break;
+        case 'halftime': if (s === 0) n = { midi: r1, len: 6 }; else if (s === 6 || s === 7) n = { midi: r1, len: 1 }; else if (s === 10) n = { midi: r1 + 1, len: 6 }; break;
       }
       bass[i] = n;
+      // ギター（パワーコード＝ルート+5度+オクターブ）
+      const g = gt[s];
+      if (g === 'X' || g === 'x') {
+        let len = 1;
+        while (s + len < 16 && gt[s + len] === '-') len++;
+        gtr[i] = { root: 40 + ((ch.root + 8) % 12), fifth: ch.fifth, len: g === 'X' ? Math.max(len, 2) : 1, hard: g === 'X' };
+      }
       if (song.arp) {
-        const tones = ch.tones, oct = 12 * ((song.arpOct || 5) + 1);
-        arp[i] = { midi: oct + tones[s % tones.length] - 12 * (s % 6 === 5 ? 1 : 0), len: 1 };
+        const oct = 12 * ((song.arpOct || 5) + 1);
+        arp[i] = { midi: oct + ch.tones[s % 3] + (s % 6 >= 3 ? 12 : 0) };
       }
     }
   }
-  const drm = song.drm.trim().split(/\s+/);
-  return { steps, lead, bass, arp, drm };
+  return { steps, lead, bass, gtr, arp, drm: toks(song.drm) };
 }
 
 // ===== 演奏エンジン =====
-let AC = null, out = null, noise = null;
-let cur = null;          // { key, song, data, step, nextT, phase }
-let timer = null;
-let volume = 0.5;
+let AC = null, master = null, noise = null, waves = null, shaperCurve = null;
+let cur = null, timer = null, volume = 0.5;
 
 function ensureOut(ac) {
-  if (AC === ac && out) return;
+  if (AC === ac && master) return;
   AC = ac;
-  out = AC.createGain(); out.gain.value = volume; out.connect(AC.destination);
-  // ドラム用ノイズ
-  const len = AC.sampleRate * 0.5, buf = AC.createBuffer(1, len, AC.sampleRate), d = buf.getChannelData(0);
+  // マスター：コンプレッサーで音圧を上げる
+  const comp = AC.createDynamicsCompressor();
+  comp.threshold.value = -18; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.15;
+  master = AC.createGain(); master.gain.value = volume;
+  comp.connect(master).connect(AC.destination);
+  master.input = comp;
+  const len = AC.sampleRate * 1.2, buf = AC.createBuffer(1, len, AC.sampleRate), d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   noise = buf;
+  // パルス波（デューティ比 12.5% / 25%）
+  const pulse = (duty) => {
+    const n = 64, re = new Float32Array(n), im = new Float32Array(n);
+    for (let k = 1; k < n; k++) re[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty);
+    return AC.createPeriodicWave(re, im);
+  };
+  waves = { pulse12: pulse(0.125), pulse25: pulse(0.25) };
+  // ギター用の歪み
+  shaperCurve = new Float32Array(1024);
+  for (let i = 0; i < 1024; i++) { const x = i / 512 - 1; shaperCurve[i] = Math.tanh(x * 6); }
 }
 
-function note(t, f, dur, type, vol, opt = {}) {
-  const o = AC.createOscillator(), g = AC.createGain();
-  o.type = type; o.frequency.setValueAtTime(f, t);
-  if (opt.vib) { // ビブラート
-    const l = AC.createOscillator(), lg = AC.createGain();
-    l.frequency.value = opt.vib; lg.gain.value = f * 0.012;
-    l.connect(lg).connect(o.frequency); l.start(t); l.stop(t + dur + 0.05);
-  }
+function mkOsc(type, f, t) {
+  const o = AC.createOscillator();
+  if (waves[type]) o.setPeriodicWave(waves[type]); else o.type = type;
+  o.frequency.setValueAtTime(f, t);
+  return o;
+}
+
+function env(g, t, vol, dur, attack = 0.006) {
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
-  if (opt.bell) g.gain.exponentialRampToValueAtTime(vol * 0.15, t + Math.min(dur, 0.35)); // 鈴のように減衰
-  else g.gain.setValueAtTime(vol * 0.8, t + Math.max(0.01, dur * 0.6));
+  g.gain.exponentialRampToValueAtTime(vol, t + attack);
+  g.gain.setValueAtTime(vol * 0.85, t + Math.max(attack + 0.005, dur * 0.7));
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(out);
-  o.start(t); o.stop(t + dur + 0.02);
 }
 
-function drum(t, k) {
+function leadNote(bus, t, midi, dur, song, vol) {
+  const f = freqOf(midi), g = AC.createGain();
+  const types = song.lead === 'saw2' ? [['sawtooth', -9], ['sawtooth', 9]] : [[song.lead, 0]];
+  for (const [type, cents] of types) {
+    const o = mkOsc(type, f, t);
+    o.detune.value = cents;
+    if (song.vib) {
+      const l = AC.createOscillator(), lg = AC.createGain();
+      l.frequency.value = song.vib; lg.gain.value = 18; // セント単位のビブラート
+      l.connect(lg).connect(o.detune); l.start(t + 0.12); l.stop(t + dur + 0.05);
+    }
+    o.connect(g); o.start(t); o.stop(t + dur + 0.03);
+  }
+  env(g, t, vol, dur);
+  g.connect(bus.lead);
+}
+
+function bassNote(bus, t, midi, dur, acc) {
+  const o = mkOsc('sawtooth', freqOf(midi), t), f = AC.createBiquadFilter(), g = AC.createGain();
+  f.type = 'lowpass'; f.Q.value = 6;
+  f.frequency.setValueAtTime(acc ? 1400 : 900, t); f.frequency.exponentialRampToValueAtTime(250, t + dur);
+  env(g, t, 0.11, dur, 0.004);
+  o.connect(f).connect(g).connect(bus.out); o.start(t); o.stop(t + dur + 0.03);
+}
+
+function gtrHit(bus, t, root, fifth, dur, hard) {
+  const g = AC.createGain(), sh = AC.createWaveShaper(), lp = AC.createBiquadFilter(), pre = AC.createGain();
+  sh.curve = shaperCurve; pre.gain.value = 1.2;
+  lp.type = 'lowpass'; lp.frequency.value = hard ? 2600 : 1800;
+  for (const [iv, det] of [[0, -6], [0, 6], [fifth, 0], [12, 0]]) {
+    const o = mkOsc('sawtooth', freqOf(root + iv), t);
+    o.detune.value = det;
+    o.connect(pre); o.start(t); o.stop(t + dur + 0.03);
+  }
+  pre.connect(sh).connect(lp).connect(g).connect(bus.out);
+  env(g, t, hard ? 0.05 : 0.04, dur, 0.003);
+}
+
+function drum(bus, t, k, accent) {
+  const out = bus.out;
   if (k === 'k') {
     const o = AC.createOscillator(), g = AC.createGain();
-    o.type = 'sine'; o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
-    g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
-    o.connect(g).connect(out); o.start(t); o.stop(t + 0.16);
-  } else if (k === 's' || k === 'h') {
+    o.type = 'sine'; o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+    g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(g).connect(out); o.start(t); o.stop(t + 0.22);
+  } else if (k === 't') {
+    const f0 = typeof accent === 'number' && accent > 0 ? accent : 180;
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * 0.55, t + 0.18);
+    g.gain.setValueAtTime(0.3, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(g).connect(out); o.start(t); o.stop(t + 0.22);
+  } else {
+    const P = {
+      s: ['bandpass', 1900, 0.16, 0.16], h: ['highpass', 8000, 0.04, 0.035],
+      o: ['highpass', 7000, 0.22, 0.04], c: ['highpass', 4500, 1.1, 0.07],
+    }[k];
+    if (!P) return;
     const src = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
     src.buffer = noise;
-    f.type = k === 's' ? 'bandpass' : 'highpass'; f.frequency.value = k === 's' ? 1800 : 7000;
-    const dur = k === 's' ? 0.12 : 0.035, v = k === 's' ? 0.09 : 0.03;
-    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f).connect(g).connect(out); src.start(t); src.stop(t + dur + 0.01);
+    f.type = P[0]; f.frequency.value = P[1];
+    g.gain.setValueAtTime(P[3] * (accent === true ? 1.3 : 1), t); g.gain.exponentialRampToValueAtTime(0.0001, t + P[2]);
+    src.connect(f).connect(g).connect(out); src.start(t); src.stop(t + P[2] + 0.02);
+    if (k === 's') { // スネアの胴鳴り
+      const o = AC.createOscillator(), og = AC.createGain();
+      o.type = 'triangle'; o.frequency.setValueAtTime(200, t); o.frequency.exponentialRampToValueAtTime(120, t + 0.08);
+      og.gain.setValueAtTime(0.12, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      o.connect(og).connect(out); o.start(t); o.stop(t + 0.12);
+    }
   }
 }
 
-function schedule() {
+// 曲ごとの出力バス（リード用のエコー付き）
+function makeBus(song, stepDur) {
+  const out = AC.createGain(); out.gain.value = 1; out.connect(master.input);
+  const lead = AC.createGain(); lead.connect(out);
+  if (song.echo) {
+    const d = AC.createDelay(1), fb = AC.createGain(), wet = AC.createGain();
+    d.delayTime.value = Math.min(0.9, stepDur * 3); fb.gain.value = 0.3; wet.gain.value = 0.28;
+    lead.connect(d); d.connect(fb).connect(d); d.connect(wet).connect(out);
+  }
+  return { out, lead };
+}
+
+const FILL_TOM = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 220, 0, 160, 0];
+
+function schedule(horizon) {
   if (!cur || !AC) return;
   const { song, data } = cur;
-  while (cur.nextT < AC.currentTime + 0.15) {
-    if (cur.step % 16 === 0 && cur.pending) { cur.phase = cur.pending; cur.pending = 0; } // 形態変化は小節の頭で
+  const until = horizon ?? AC.currentTime + 0.15;
+  while (cur.nextT < until) {
+    const i = cur.step % data.steps, loop = Math.floor(cur.step / data.steps), bar = Math.floor(i / 16), s = i % 16;
+    if (s === 0 && cur.pending) { cur.phase = cur.pending; cur.pending = 0; } // 形態変化は小節の頭で
     const p2 = cur.phase === 2, tr = p2 ? 1 : 0;           // 第2形態は半音上へ転調
     const stepDur = 60 / (song.bpm * (p2 ? 1.12 : 1)) / 4;   // 16分音符の長さ（第2形態はテンポアップ）
-    const i = cur.step % data.steps, t = cur.nextT;
+    const t = cur.nextT, bus = cur.bus;
+    // メロディ（偶数ループはハモリを重ねる）
     const L = data.lead[i];
-    if (L) note(t, freqOf(L.midi + tr), L.len * stepDur * (song.stacc ? 0.5 : 0.92), song.lead, song.leadVol, { vib: song.vib, bell: song.bell });
+    if (L) {
+      const dur = L.len * stepDur * (song.stacc ? 0.5 : 0.92);
+      leadNote(bus, t, L.midi + tr, dur, song, song.leadVol);
+      if (loop % 2 === 1 && song.harm) leadNote(bus, t, L.midi + tr + song.harm, dur, song, song.leadVol * 0.55);
+    }
     const B = data.bass[i];
-    if (B) note(t, freqOf(B.midi + tr), B.len * stepDur * (B.short ? 0.4 : 0.9), song.bassWave, song.bassVol || 0.06);
+    if (B) bassNote(bus, t, B.midi + tr, B.len * stepDur * 0.9, B.acc);
+    const Gt = data.gtr[i];
+    if (Gt) gtrHit(bus, t, Gt.root + tr, Gt.fifth, Gt.len * stepDur * (Gt.hard ? 0.95 : 0.55), Gt.hard);
     const A = data.arp[i];
-    if (A) note(t, freqOf(A.midi + tr), stepDur * 0.8, song.arp, song.arp === 'square' ? 0.012 : 0.025);
-    const d = data.drm[i % data.drm.length];
-    if (d && d !== '.') drum(t, d);
+    if (A) leadNote(bus, t, A.midi + tr, stepDur * 0.7, { lead: song.arp === 'square' ? 'pulse25' : 'triangle' }, song.arp === 'square' ? 0.012 : 0.03);
+    // ドラム：ループの頭でクラッシュ、2ループに1回は最後の小節の後半をフィルに
+    const fill = loop % 2 === 1 && bar === data.steps / 16 - 1 && s >= 12;
+    if (i === 0) drum(bus, t, 'c');
+    if (fill) { drum(bus, t, s % 2 ? 's' : 't', FILL_TOM[s]); if (s === 12) drum(bus, t, 'k'); }
+    else { const d = data.drm[s]; if (d && d !== '.') drum(bus, t, d, s % 4 === 0); }
     cur.nextT += stepDur;
     cur.step++;
   }
@@ -332,22 +422,21 @@ function schedule() {
 
 function stop(fade = 0.4) {
   if (!cur) return;
+  const old = cur.bus;
   cur = null;
   clearInterval(timer); timer = null;
-  if (out && AC) { // フェードアウトして出力を作り直す
-    const old = out;
-    old.gain.setTargetAtTime(0.0001, AC.currentTime, fade / 3);
-    setTimeout(() => { try { old.disconnect(); } catch {} }, fade * 1000 + 200);
-    out = AC.createGain(); out.gain.value = volume; out.connect(AC.destination);
+  if (old && AC) { // フェードアウトしてから切り離す
+    old.out.gain.setTargetAtTime(0.0001, AC.currentTime, fade / 3);
+    setTimeout(() => { try { old.out.disconnect(); } catch {} }, fade * 1000 + 300);
   }
 }
 
 function play(key, phase) {
   const song = SONGS[key];
   if (!song) return stop();
-  cur = { key, song, data: compile(song), step: 0, nextT: AC.currentTime + 0.1, phase };
+  cur = { key, song, data: compile(song), step: 0, nextT: AC.currentTime + 0.1, phase, bus: makeBus(song, 60 / song.bpm / 4) };
   clearInterval(timer);
-  timer = setInterval(schedule, 25);
+  timer = setInterval(() => schedule(), 25);
   schedule();
 }
 
@@ -362,8 +451,20 @@ function update(ac, key, phase, enabled) {
 
 function setVolume(v) {
   volume = Math.max(0, Math.min(1, v));
-  if (out && AC) out.gain.setTargetAtTime(volume, AC.currentTime, 0.05);
+  if (master && AC) master.gain.setTargetAtTime(volume, AC.currentTime, 0.05);
 }
 
-window.SBMusic = { update, setVolume, stop, songs: Object.keys(SONGS).map(k => ({ key: k, title: SONGS[k].title })) };
+// 検証用：曲をオフラインで書き出して音量を測る（スピーカー不要）
+async function render(key, seconds = 4, phase = 1) {
+  const saved = { AC, master, noise, waves, shaperCurve, cur, timer };
+  const off = new OfflineAudioContext(1, Math.ceil(44100 * seconds), 44100);
+  AC = null; master = null; ensureOut(off);
+  const song = SONGS[key];
+  cur = { key, song, data: compile(song), step: 0, nextT: 0.05, phase, bus: makeBus(song, 60 / song.bpm / 4) };
+  schedule(seconds);
+  ({ AC, master, noise, waves, shaperCurve, cur, timer } = saved);
+  return off.startRendering();
+}
+
+window.SBMusic = { update, setVolume, stop, render, songs: Object.keys(SONGS).map(k => ({ key: k, title: SONGS[k].title })) };
 })();
