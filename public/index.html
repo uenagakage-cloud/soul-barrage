@@ -99,7 +99,8 @@
   .opt.d4.on { background: #bf5af2; border-color: #bf5af2; color: #fff; } .d4 { color: #bf5af2; }
   .sens { margin-top: 14px; }
   .sens label b { color: #ffd60a; font-size: 16px; }
-  .sensIn { width: 100%; height: 32px; accent-color: #ffd60a; touch-action: pan-x; }
+  .sensIn, .bgmIn { width: 100%; height: 32px; accent-color: #ffd60a; touch-action: pan-x; }
+  .bgmSel { flex: 1; font-family: inherit; font-size: 14px; background: #000; color: #fff; border: 2px solid #888; padding: 6px; min-width: 0; }
   .sensHint { font-size: 12px; color: #888; margin: 2px 0 0; }
   .sensWrap { margin-top: 14px; }
   .sensWrap summary { cursor: pointer; color: #ffd60a; font-size: 14px; }
@@ -214,6 +215,16 @@
 <div class="overlay hidden" id="settings" style="z-index:25">
   <div class="panel">
     <h2>設定</h2>
+    <div class="sens">
+      <label>BGMの音量 <b id="bgmVal">5</b></label>
+      <input type="range" id="bgmIn" class="bgmIn" min="0" max="10" step="1">
+      <p class="sensHint">ストーリーのボス戦で流れます（♪ボタンで効果音ごとミュート）</p>
+    </div>
+    <div class="sens">
+      <label>サウンドテスト（ボスのBGMを聴く）</label>
+      <div class="row"><select id="bgmSel" class="bgmSel"></select><button class="btn" id="bgmPlay" type="button">▶</button></div>
+      <label style="margin-top:6px"><input type="checkbox" id="bgmP2"> 第2形態のアレンジ</label>
+    </div>
     <div class="sensBox"></div>
     <p class="sensHint">どの設定でも最高速は同じです。スティックの点線の楕円が「最高速になる位置」です</p>
     <button class="btn primary" id="btnSettingsClose">とじる</button>
@@ -226,6 +237,7 @@
 <div id="conn" class="hidden">接続が切れました<br>再接続中…</div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="music.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

@@ -444,7 +444,7 @@ buildSensUI();
 document.addEventListener('input', (e) => { if (e.target.classList.contains('sensIn')) setSens(e.target.dataset.k, e.target.value); });
 document.addEventListener('click', (e) => { if (e.target.classList.contains('sensReset')) SENS_DEF.forEach(d => setSens(d.k, 5)); });
 $('btnSettings').onclick = () => { resetInput(); show('settings'); };
-$('btnSettingsClose').onclick = () => hide('settings');
+$('btnSettingsClose').onclick = () => { hide('settings'); if (preview) setPreview(false); };
 
 // ===== タッチ入力（スティック + SHOTボタン） =====
 // スマホは Touch Events で指ごとに追跡し、毎イベントで「その指がまだ画面にあるか」を確認する。
@@ -527,7 +527,7 @@ addEventListener('mouseup', () => pointerUp('mouse'));
 function resetInput() { releaseStick(); cancelAim(); keys.clear(); }
 addEventListener('blur', resetInput);
 addEventListener('pagehide', resetInput);
-document.addEventListener('visibilitychange', () => { if (document.hidden) resetInput(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { resetInput(); if (window.SBMusic) SBMusic.stop(0.1); } });
 addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 
@@ -616,6 +616,36 @@ $('btnSound').onclick = () => { soundOn = !soundOn; store.set('sb_sound', soundO
 function audioInit() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+}
+
+// ===== BGM（ボスごとの専用曲。music.js） =====
+let bgmVol = clamp(parseInt(store.get('sb_bgm', '5'), 10), 0, 10);
+if (!Number.isFinite(bgmVol)) bgmVol = 5;
+function setBgm(v) {
+  bgmVol = clamp(parseInt(v, 10) || 0, 0, 10);
+  store.set('sb_bgm', String(bgmVol));
+  $('bgmIn').value = bgmVol; $('bgmVal').textContent = bgmVol;
+  if (window.SBMusic) SBMusic.setVolume(bgmVol / 10);
+}
+$('bgmIn').addEventListener('input', () => setBgm($('bgmIn').value));
+setBgm(bgmVol);
+// サウンドテスト（設定画面）
+let preview = null; // { key, phase }
+if (window.SBMusic) $('bgmSel').innerHTML = SBMusic.songs.map(s => `<option value="${s.key}">${esc(s.title)}</option>`).join('');
+function setPreview(on) {
+  preview = on ? { key: $('bgmSel').value, phase: $('bgmP2').checked ? 2 : 1 } : null;
+  $('bgmPlay').textContent = preview ? '■' : '▶';
+}
+$('bgmPlay').onclick = () => { audioInit(); setPreview(!preview); };
+$('bgmSel').onchange = () => { if (preview) setPreview(true); };
+$('bgmP2').onchange = () => { if (preview) setPreview(true); };
+// 流すべき曲：サウンドテスト中はその曲、ストーリーのボス戦中はボスの曲（撃破後は止めて勝利ジングル）
+function updateMusic() {
+  if (!window.SBMusic) return;
+  const b = G.boss;
+  let key = roomId && G.md === 'story' && G.st === 'play' && b && !b.dead ? b.key : null, phase = b ? b.phase : 1;
+  if (preview) ({ key, phase } = preview);
+  SBMusic.update(AC, key, phase, soundOn && bgmVol > 0);
 }
 function tone(freq, dur, type = 'square', vol = 0.08, slide = 0, delay = 0) {
   if (!AC || !soundOn) return;
@@ -1310,6 +1340,7 @@ function loop(t) {
   const dt = Math.min(0.05, (t - last) / 1000); last = t;
   update(dt);
   draw();
+  updateMusic();
   if (roomId && t - plistTimer > 200) {
     plistTimer = t; updatePlist(); updateLobbyNote();
     // ストーリーではボスのHPバーと重ならないよう、縦画面のプレイヤー一覧をボックスの下側へ
