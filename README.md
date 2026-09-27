@@ -33,3 +33,11 @@ Open http://localhost:3000 in a browser.
 
 Change the `C` constants near the top of `server.js` (HP, move speed, cooldown, damage, and so on).
 Add new bullet patterns to the `PATTERNS` object.
+
+## Modes and difficulty
+
+- **Battle**: solo survival (1 player) / battle royale (2+ players)
+- **Story (co-op)**: defeat 5 bosses in order. Works solo or with friends. Knocked-out players revive at the next boss. If everyone goes down, you retry from that boss.
+- **Difficulty**: easy / normal / hard / oni / god (the host chooses in the lobby)
+
+The difficulty numbers are in `DIFFS` in `server.js`. Boss HP, lines and attack patterns are in `BOSSES`.

@@ -87,6 +87,16 @@
   .plrow { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 16px; border-bottom: 1px dashed #333; }
   .plrow .r { margin-left: auto; font-size: 13px; color: #aaa; }
   .win { color: #ffd60a; }
+  .btn.story { color: #bf5af2; border-color: #bf5af2; }
+  #lobbyCfg { margin-bottom: 10px; }
+  .cfgRow { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 6px 0; font-size: 14px; }
+  .cfgRow > span { width: 52px; color: #aaa; font-size: 13px; }
+  .opt { background: #000; color: #aaa; border: 2px solid #555; font-size: 13px; padding: 5px 8px; cursor: pointer; }
+  .opt.on { color: #000; background: #ffd60a; border-color: #ffd60a; }
+  .opt.d0.on { background: #32d74b; border-color: #32d74b; } .d0 { color: #32d74b; }
+  .opt.d2.on { background: #ff9f0a; border-color: #ff9f0a; } .d2 { color: #ff9f0a; }
+  .opt.d3.on { background: #ff453a; border-color: #ff453a; } .d3 { color: #ff453a; }
+  .opt.d4.on { background: #bf5af2; border-color: #bf5af2; color: #fff; } .d4 { color: #bf5af2; }
   .sens { margin-top: 14px; }
   .sens label b { color: #ffd60a; font-size: 16px; }
   .sensIn { width: 100%; height: 32px; accent-color: #ffd60a; touch-action: pan-x; }
@@ -122,7 +132,8 @@
   <div class="card">
     <h3>あそぶ</h3>
     <button class="btn primary" id="btnQuick">▶ すぐにあそぶ（だれとでも）</button>
-    <button class="btn" id="btnCreate">▶ へやをつくる（友達と）</button>
+    <button class="btn" id="btnCreate">▶ へやをつくる（友達とバトル）</button>
+    <button class="btn story" id="btnStory">▶ ストーリー（ボス討伐・ひとりでも協力でも）</button>
     <label style="margin-top:14px" for="codeIn">へやコードで参加</label>
     <div class="row">
       <input id="codeIn" type="text" maxlength="5" placeholder="ABCD" autocomplete="off">
@@ -144,6 +155,8 @@
       <li>時間がたつほど弾幕が激しくなる。1人ならソロで生存記録に挑戦！</li>
       <li>対戦（2人以上）は<b>バトロワ</b>。40秒たつと<b>エリアが縮小</b>していく！</li>
       <li>試合中の部屋に参加すると<b>観戦</b>し、次の試合から参戦できます</li>
+      <li><b style="color:#bf5af2">ストーリー</b>＝5体のボスを順番に倒す協力モード。ボスに弾を当ててHPを削ろう。1人でも、友達と一緒でもOK。やられても次のボスで復活、全滅したらそのボスから再挑戦</li>
+      <li>ロビーでホストが<b>難易度</b>を選べます：<span style="color:#32d74b">簡単</span>／普通／<span style="color:#ff9f0a">難しい</span>／<span style="color:#ff453a">鬼</span>／<span style="color:#bf5af2">神</span></li>
     </ul>
   </div>
 
@@ -176,6 +189,7 @@
   <div class="panel">
     <h2>ロビー</h2>
     <p class="note" id="lobbyCode"></p>
+    <div id="lobbyCfg"></div>
     <div id="lobbyList"></div>
     <button class="btn primary" id="btnStart">▶ スタート</button>
     <button class="btn" id="btnReady">準備OK</button>

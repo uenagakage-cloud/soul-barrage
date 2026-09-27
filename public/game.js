@@ -44,7 +44,7 @@ socket.on('connect', () => {
   clockSamples.length = 0;
   for (let i = 0; i < 4; i++) setTimeout(syncClock, i * 150);
   setStatus('');
-  $('btnQuick').disabled = $('btnCreate').disabled = $('btnCode').disabled = false;
+  $('btnQuick').disabled = $('btnCreate').disabled = $('btnStory').disabled = $('btnCode').disabled = false;
   // 再接続時は同じ部屋に戻る
   if (joinInfo && roomId) join({ ...joinInfo, mode: 'code', code: roomId }, true);
 });
@@ -60,7 +60,11 @@ const G = {
   bullets: new Map(),
   particles: [], texts: [], emotes: new Map(),
   result: null,
+  cfg: ['battle', 1, 0, 5], // [ゲーム種別, 難易度, ストーリーの現在ステージ, 全ステージ数]
+  boss: null,               // ストーリーのボス
+  talk: null,               // ボスのセリフ {text, until}
 };
+const diffOf = () => (C && C.DIFFS[G.cfg[1]]) || { name: '普通', iframe: 1000 };
 const me = { x: 240, y: 240, invUntil: 0, needSnap: true, moving: false, lastSend: 0, cdEnd: 0, hp: 20, alive: false, sp: 0 };
 let spPressed = 0;
 let shake = 0, flash = 0;
@@ -73,13 +77,45 @@ socket.on('roster', (list) => {
 
 socket.on('round', () => {
   G.bullets.clear(); G.particles.length = 0; G.texts.length = 0;
+  G.boss = null; G.talk = null;
   me.needSnap = true; me.invUntil = 0;
   hide('result');
+});
+
+// ===== ストーリー（ボス戦）のイベント =====
+socket.on('stage', (s) => {
+  G.bullets.clear();
+  me.needSnap = true; // 復活した人は初期位置へ
+  toast(`STAGE ${s.stage + 1}/${s.total}  ${s.name}`);
+  sfx('stage');
+});
+socket.on('talk', (t) => { G.talk = { text: t.text, until: t.until, start: sNow() }; sfx('talk'); });
+socket.on('bx', (ids) => {
+  // ボスに命中したプレイヤー弾を消す
+  for (const id of ids) {
+    const b = G.bullets.get(id);
+    if (b) { burst(b.x, b.y, colorOf(b.owner), 3, 80); G.bullets.delete(id); }
+  }
+  sfx('bossHit');
+});
+socket.on('clear', () => {
+  // ボス撃破：敵弾をすべて消す
+  for (const [id, b] of G.bullets) if (!b.owner) { burst(b.x, b.y, '#fff', 1, 40); G.bullets.delete(id); }
 });
 
 socket.on('s', (s) => {
   const prevSt = G.st;
   G.st = s.st; G.su = s.su; G.rs = s.rs; G.rd = s.rd; G.md = s.md;
+  const cfgChanged = s.cfg.join() !== G.cfg.join();
+  G.cfg = s.cfg;
+  if (cfgChanged) updateLobby();
+  if (s.bs) {
+    const [key, x, y, hp, max, stage, phase, flash, dead, name, color, r] = s.bs;
+    if (!G.boss || G.boss.key !== key) G.boss = { key, x, y, deadSince: 0 };
+    Object.assign(G.boss, { tx: x, ty: y, hp, max, stage, phase, flash, name, color, r });
+    if (dead && !G.boss.dead) G.boss.deadSince = performance.now();
+    G.boss.dead = !!dead;
+  } else G.boss = null;
   const seen = new Set();
   for (const [id, x, y, hp, alive, inv, cd, sp] of s.p) {
     seen.add(id);
@@ -139,6 +175,11 @@ socket.on('fx', (f) => {
     shake = Math.max(shake, 8);
     if (f.id === myId) { me.invUntil = Math.max(me.invUntil, now + f.inv); vibrate([30, 30, 60]); }
     sfx('special');
+  } else if (f.t === 'bossdown') {
+    for (let i = 0; i < 4; i++) setTimeout(() => { burst(f.x + (Math.random() - 0.5) * 60, f.y + (Math.random() - 0.5) * 60, f.color, 24, 220); shake = 12; sfx('break'); }, i * 250);
+    G.texts.push({ x: C.W / 2, y: C.H / 2, text: 'STAGE CLEAR!', color: '#ffd60a', life: 2.5, big: true });
+    vibrate([80, 60, 80, 60, 160]);
+    setTimeout(() => sfx('win'), 900);
   } else if (f.t === 'emote') {
     G.emotes.set(f.id, { e: f.e, until: performance.now() + 1800 });
     sfx('emote');
@@ -153,7 +194,7 @@ function nameOf(id) { const r = G.roster.get(id); return r ? r.name : '???'; }
 function onStateChange(prev, st) {
   if (st === 'countdown') { hide('lobby'); hide('result'); }
   if (st === 'play') { sfx('go'); }
-  if (st === 'lobby') { hide('result'); show('lobby'); updateLobby(); G.bullets.clear(); }
+  if (st === 'lobby') { hide('result'); show('lobby'); updateLobby(); G.bullets.clear(); G.boss = null; G.talk = null; }
   if (st !== 'lobby') hide('lobby');
 }
 
@@ -171,7 +212,7 @@ $('swatches').addEventListener('click', (e) => {
 });
 const urlRoom = new URLSearchParams(location.search).get('room');
 if (urlRoom) { $('codeIn').value = urlRoom.toUpperCase(); $('btnCode').classList.add('hl'); }
-$('btnQuick').disabled = $('btnCreate').disabled = $('btnCode').disabled = true;
+$('btnQuick').disabled = $('btnCreate').disabled = $('btnStory').disabled = $('btnCode').disabled = true;
 
 function setStatus(t, err) { const s = $('status'); s.textContent = t; s.classList.toggle('err', !!err); }
 
@@ -202,6 +243,7 @@ function join(info, isRejoin) {
 }
 $('btnQuick').onclick = () => join({ mode: 'quick' });
 $('btnCreate').onclick = () => join({ mode: 'create' });
+$('btnStory').onclick = () => join({ mode: 'create', game: 'story' });
 $('btnCode').onclick = () => {
   const code = $('codeIn').value.trim().toUpperCase();
   if (!code) return setStatus('へやコードを入力してね', true);
@@ -234,7 +276,7 @@ async function loadTop() {
   try {
     const list = await (await fetch('/api/top')).json();
     $('topScores').innerHTML = list.length
-      ? list.map(s => `<li>${esc(s.name)} — ${(s.ms / 1000).toFixed(1)}秒</li>`).join('')
+      ? list.map(s => `<li>${esc(s.name)} — ${(s.ms / 1000).toFixed(1)}秒${s.diff ? `（${esc(s.diff)}）` : ''}</li>`).join('')
       : '<li>まだ記録がありません</li>';
   } catch {}
 }
@@ -260,6 +302,23 @@ function updateLobby() {
     return `<div class="plrow"><span style="width:20px;display:inline-block">${heartSvg(p.color)}</span>${esc(p.name)}${p.id === myId ? '（あなた）' : ''} ${tag}<span class="r">★${p.wins} / KO ${p.kills}</span></div>`;
   }).join('');
   $('lobbyCode').innerHTML = isPublic ? '' : `へやコード <b>${esc(roomId)}</b>`;
+  // モード・難易度（プライベートのホストだけ変更可能）
+  const [game, diff, stage, total] = G.cfg;
+  const canEdit = !isPublic && amHost();
+  const diffs = C ? C.DIFFS : [];
+  let cfgHtml;
+  if (canEdit) {
+    cfgHtml = `<div class="cfgRow"><span>モード</span>
+        <button class="opt ${game === 'battle' ? 'on' : ''}" data-cfg="game" data-v="battle">バトル</button>
+        <button class="opt ${game === 'story' ? 'on' : ''}" data-cfg="game" data-v="story">ストーリー（協力）</button></div>
+      <div class="cfgRow"><span>難易度</span>${diffs.map((d, i) =>
+        `<button class="opt d${i} ${diff === i ? 'on' : ''}" data-cfg="diff" data-v="${i}">${d.name}</button>`).join('')}</div>`;
+    if (game === 'story' && stage > 0) cfgHtml += `<div class="cfgRow"><span>再開</span>STAGE ${stage + 1}/${total} から <button class="opt" data-cfg="restart">最初からにする</button></div>`;
+  } else {
+    cfgHtml = `<div class="cfgRow"><span>モード</span><b>${game === 'story' ? `ストーリー（協力）STAGE ${stage + 1}/${total}` : 'バトル'}</b></div>
+      <div class="cfgRow"><span>難易度</span><b class="d${diff}">${diffs[diff] ? diffs[diff].name : ''}</b></div>`;
+  }
+  $('lobbyCfg').innerHTML = cfgHtml;
   const mine = G.roster.get(myId);
   const others = list.filter(p => !p.host);
   const readyN = others.filter(p => p.ready).length;
@@ -273,7 +332,9 @@ function updateLobby() {
 function updateLobbyNote() {
   if (G.st !== 'lobby') return;
   const n = G.roster.size;
-  let t = n <= 1 ? '1人ならソロで生存記録に挑戦。2人以上でバトロワ！' : `${n}人でバトロワ！ 最後まで残った人の勝ち`;
+  let t = G.cfg[0] === 'story'
+    ? (n <= 1 ? '1人でボスに挑戦！ 友達を招待すれば協力プレイ' : `${n}人で協力してボスを倒そう！`)
+    : n <= 1 ? '1人ならソロで生存記録に挑戦。2人以上でバトロワ！' : `${n}人でバトロワ！ 最後まで残った人の勝ち`;
   if (isPublic) t += G.su ? `<br>全員準備OK、または ${Math.max(0, Math.ceil((G.su - sNow()) / 1000))} 秒でスタート` : '';
   else if (amHost()) t += '<br>みんなが揃ったらスタートを押してね。「招待」で友達にリンクを送れます';
   else t += '<br>ホストがスタートするのを待っています';
@@ -281,19 +342,35 @@ function updateLobbyNote() {
 }
 
 function showResult(r) {
-  let title;
-  if (r.mode === 'versus') title = r.winner ? `<span class="win">${esc(nameOf(r.winner))} の勝利！</span>` : '引き分け';
+  let title, note = 'まもなくロビーに戻ります';
+  const dname = C.DIFFS[r.diff] ? C.DIFFS[r.diff].name : '';
+  if (r.mode === 'story') {
+    const s = r.story;
+    title = s.cleared ? '<span class="win">ALL CLEAR!</span>' : 'GAME OVER';
+    note = s.cleared
+      ? `全${s.total}体のボスを討伐！（難易度: ${dname} / ${(s.time / 1000).toFixed(0)}秒）`
+      : `STAGE ${s.stage + 1}/${s.total}「${esc(s.boss)}」で全滅… 次はこのボスから再開できます`;
+  } else if (r.mode === 'versus') title = r.winner ? `<span class="win">${esc(nameOf(r.winner))} の勝利！</span>` : '引き分け';
   else title = `記録 <span class="win">${((r.ranking[0] ? r.ranking[0].time : 0) / 1000).toFixed(1)}秒</span>`;
   $('resTitle').innerHTML = title;
   $('resList').innerHTML = r.ranking.map((p, i) =>
-    `<div class="plrow"><b>${i + 1}</b><span style="width:20px;display:inline-block">${heartSvg(p.color)}</span>${esc(p.name)}<span class="r">${(p.time / 1000).toFixed(1)}s · KO${p.kills} · GRAZE${p.grazes}</span></div>`).join('');
-  $('resNote').innerHTML = r.mode === 'solo' && r.top.length
-    ? 'ソロ記録TOP: ' + r.top.slice(0, 3).map(s => `${esc(s.name)} ${(s.ms / 1000).toFixed(1)}s`).join(' / ')
-    : 'まもなくロビーに戻ります';
+    `<div class="plrow"><b>${i + 1}</b><span style="width:20px;display:inline-block">${heartSvg(p.color)}</span>${esc(p.name)}<span class="r">${
+      r.mode === 'story' ? `ボスへのダメージ ${p.dmg} · GRAZE${p.grazes}` : `${(p.time / 1000).toFixed(1)}s · KO${p.kills} · GRAZE${p.grazes}`}</span></div>`).join('');
+  if (r.mode === 'solo' && r.top.length) note = 'ソロ記録TOP: ' + r.top.slice(0, 3).map(s => `${esc(s.name)} ${(s.ms / 1000).toFixed(1)}s(${esc(s.diff || '')})`).join(' / ');
+  $('resNote').innerHTML = note;
   show('result');
-  const iWon = r.winner === myId;
+  const iWon = r.winner === myId || (r.story && r.story.cleared);
   sfx(iWon ? 'win' : 'end');
 }
+
+// ロビーの設定ボタン（ホストのみ）
+$('lobbyCfg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-cfg]'); if (!b) return;
+  const k = b.dataset.cfg;
+  if (k === 'game') socket.emit('cfg', { game: b.dataset.v });
+  else if (k === 'diff') socket.emit('cfg', { diff: +b.dataset.v });
+  else if (k === 'restart') socket.emit('cfg', { restart: true });
+});
 
 let plistTimer = 0;
 function updatePlist() {
@@ -470,6 +547,7 @@ function readInput() {
 
 // 自動エイム：一番近い生存中の敵。いなければ最後に動いた方向（初期は上）
 function autoTarget() {
+  if (G.md === 'story') return G.boss && !G.boss.dead ? G.boss : null; // ストーリーはボスを狙う
   let best = null, bd = Infinity;
   for (const [id, p] of G.players) {
     if (id === myId || !p.alive) continue;
@@ -559,6 +637,9 @@ function sfx(n) {
     case 'spReady': [660, 880, 1100].forEach((f, i) => tone(f, 0.1, 'triangle', 0.06, 0, i * 0.08)); break;
     case 'special': tone(200, 0.5, 'sawtooth', 0.09, 800); tone(100, 0.6, 'square', 0.07, -40, 0.05); break;
     case 'emote': tone(1000, 0.05, 'triangle', 0.04); break;
+    case 'talk': tone(520, 0.04, 'square', 0.03); break;
+    case 'stage': [392, 523, 659].forEach((f, i) => tone(f, 0.12, 'square', 0.06, 0, i * 0.1)); break;
+    case 'bossHit': tone(180 + Math.random() * 60, 0.05, 'square', 0.04, -60); break;
     case 'win': [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.15, 'square', 0.06, 0, i * 0.12)); break;
     case 'end': [392, 330, 262].forEach((f, i) => tone(f, 0.2, 'square', 0.05, 0, i * 0.15)); break;
   }
@@ -634,21 +715,31 @@ function update(dt) {
     p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k;
   }
 
+  // ボスの補間
+  const B = G.boss;
+  if (B) { const k = Math.min(1, dt * 12); B.x += (B.tx - B.x) * k; B.y += (B.ty - B.y) * k; }
+
   // 弾の更新と当たり判定（自分のハートのみ判定）
   const myP = G.players.get(myId);
   const invincible = now < me.invUntil || (myP && myP.inv > 0);
+  const takeHit = (bid) => {
+    socket.emit('hit', bid);
+    me.invUntil = now + diffOf().iframe;
+    shake = 10; flash = 0.25;
+    vibrate(70); sfx('hurt');
+  };
+  // ボスへの体当たり
+  if (playing && B && !B.dead && !invincible && Math.hypot(B.x - me.x, B.y - me.y) < B.r * 0.85 + C.SOUL_R) takeHit(-1);
+  const coop = G.md === 'story';
   for (const [id, b] of G.bullets) {
     bulletPos(b, now);
     if (b.t * 1000 > b.life || (b.t > 0.3 && (b.x < -50 || b.x > C.W + 50 || b.y < -50 || b.y > C.H + 50))) { G.bullets.delete(id); continue; }
-    if (!playing || b.t < 0 || b.owner === myId) continue;
+    if (!playing || b.t < 0 || b.owner === myId || (coop && b.owner)) continue; // 協力モードは味方の弾に当たらない
     const d = Math.hypot(b.x - me.x, b.y - me.y);
     const harmful = b.kind === K.BLUE ? me.moving : b.kind === K.ORANGE ? !me.moving : true;
     if (d < b.r + C.SOUL_R - 1.5) {
       if (harmful && !invincible && now >= me.invUntil) {
-        socket.emit('hit', b.id);
-        me.invUntil = now + C.IFRAME;
-        shake = 10; flash = 0.25;
-        vibrate(70); sfx('hurt');
+        takeHit(b.id);
         if (b.kind === K.SHOT || b.kind === K.SP) G.bullets.delete(id);
       }
     } else if (d < b.r + C.SOUL_R + C.GRAZE_R && !b.grazed && harmful && !invincible) {
@@ -712,6 +803,9 @@ function draw() {
   // 背景グリッド（うっすら）
   ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
   for (let i = 40; i < C.W; i += 40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, C.H); ctx.moveTo(0, i); ctx.lineTo(C.W, i); ctx.stroke(); }
+
+  // ボス（弾より奥に描く）
+  if (G.boss) drawBoss(G.boss, pnow);
 
   // 予告
   for (const b of G.bullets.values()) {
@@ -801,10 +895,11 @@ function draw() {
   ctx.globalAlpha = 1;
   for (const t of G.texts) {
     ctx.globalAlpha = Math.min(1, t.life * 2);
-    ctx.fillStyle = t.color; ctx.font = `${t.small ? 10 : 14}px DotGothic16, monospace`; ctx.textAlign = 'center';
+    ctx.fillStyle = t.color; ctx.font = `${t.big ? 40 : t.small ? 10 : 14}px DotGothic16, monospace`; ctx.textAlign = 'center';
     ctx.fillText(t.text, t.x, t.y);
   }
   ctx.globalAlpha = 1;
+  if (G.md === 'story' && (G.st === 'play')) drawStoryUI(now);
   ctx.restore();
 
   // 被弾フラッシュ
@@ -831,11 +926,13 @@ function draw() {
     ctx.fillStyle = '#ffd60a'; ctx.font = `${Math.round(L.bs * 0.25)}px DotGothic16, monospace`;
     ctx.fillText(String(n), cx, cy);
     ctx.font = '16px DotGothic16, monospace'; ctx.fillStyle = '#fff';
-    ctx.fillText(G.md === 'versus' ? 'BATTLE ROYALE - 最後の1人になれ！' : 'SOLO - 生き残れ！', cx, cy + L.bs * 0.2);
+    ctx.fillText(G.md === 'story' ? `STORY STAGE ${G.cfg[2] + 1}/${G.cfg[3]} - 協力してボスを倒せ！` : G.md === 'versus' ? 'BATTLE ROYALE - 最後の1人になれ！' : 'SOLO - 生き残れ！', cx, cy + L.bs * 0.2);
+    ctx.fillStyle = '#aaa'; ctx.font = '14px DotGothic16, monospace';
+    ctx.fillText(`難易度: ${diffOf().name}`, cx, cy + L.bs * 0.2 + 22);
   } else if (G.st === 'play') {
     const el = Math.max(0, (now - G.rs) / 1000);
     ctx.font = '14px DotGothic16, monospace'; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.textAlign = 'right';
-    ctx.fillText(`${el.toFixed(1)}s`, L.bx + L.bs - 8, L.by + 14);
+    if (G.md !== 'story') ctx.fillText(`${diffOf().name}  ${el.toFixed(1)}s`, L.bx + L.bs - 8, L.by + 14);
     if (el < 1.2) { ctx.textAlign = 'center'; ctx.fillStyle = '#ffd60a'; ctx.font = `${Math.round(L.bs * 0.14)}px DotGothic16, monospace`; ctx.fillText('START!', cx, cy); }
     if (G.md === 'versus') {
       const toShrink = (C.SHRINK_START - (now - G.rs)) / 1000;
@@ -850,6 +947,114 @@ function draw() {
 
   drawHpLine();
   drawControls(now);
+}
+
+// ===== ボスの描画（ボスごとに形が違う） =====
+function drawBoss(b, pnow) {
+  const t = pnow / 1000, R = b.r, c = b.color, p2 = b.phase === 2;
+  let alpha = 1, scale = 1;
+  if (b.dead) { // 撃破演出：点滅しながら膨らんで消える
+    const k = Math.min(1, (pnow - b.deadSince) / 1500);
+    alpha = (1 - k) * (Math.floor(pnow / 60) % 2 ? 0.5 : 1); scale = 1 + k * 0.6;
+  }
+  const eyes = (dx, y, r, col) => {
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(-dx, y, r, 0, Math.PI * 2); ctx.arc(dx, y, r, 0, Math.PI * 2); ctx.fill();
+  };
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(b.x, b.y);
+  ctx.scale(scale, scale);
+  // 第2形態はオーラをまとう
+  if (p2 && !b.dead) {
+    ctx.globalAlpha = alpha * (0.25 + 0.15 * Math.sin(t * 8));
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(0, 0, R * 1.45, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = alpha;
+  }
+  switch (b.key) {
+    case 'slime': {
+      const w = Math.sin(t * 4) * 3;
+      ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 6, R + w, R * 0.8 - w, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(-R * 0.4, -R * 0.15, R * 0.25, R * 0.14, -0.5, 0, Math.PI * 2); ctx.fill();
+      eyes(11, 2, 5, p2 ? '#ff453a' : '#000');
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 12, 6, 0.2, Math.PI - 0.2); ctx.stroke();
+      break;
+    }
+    case 'knight': {
+      ctx.fillStyle = '#c0392b'; ctx.fillRect(-4, -R - 12, 8, 16); // 兜の飾り
+      ctx.fillStyle = c; ctx.beginPath(); ctx.arc(0, -4, R * 0.85, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(-R * 0.55, R * 0.45, R * 1.1, R * 0.45); // あご
+      ctx.fillStyle = '#000'; for (let i = -2; i <= 2; i++) ctx.fillRect(i * 7 - 1.5, R * 0.5, 3, R * 0.35);
+      eyes(11, -6, 7, '#000');
+      const glow = p2 ? (Math.floor(t * 2) % 2 ? '#2aa7ff' : '#ff9a1f') : '#2aa7ff';
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(11, -6, 3, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'witch': {
+      for (let i = 0; i < 6; i++) { // 周りの炎
+        const a = t * 2 + i * Math.PI / 3, fr = R * 1.15;
+        ctx.fillStyle = p2 ? '#64d2ff' : '#ff9f0a';
+        ctx.beginPath(); ctx.arc(Math.cos(a) * fr, Math.sin(a) * fr, 5 + Math.sin(t * 10 + i) * 2, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = '#ffd7b5'; ctx.beginPath(); ctx.arc(0, 4, R * 0.75, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1c1c1e'; // 帽子
+      ctx.beginPath(); ctx.moveTo(-R, -R * 0.2); ctx.lineTo(R, -R * 0.2); ctx.lineTo(6, -R * 1.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = c; ctx.fillRect(-R * 0.6, -R * 0.42, R * 1.2, 5);
+      eyes(9, 6, 3.5, '#000');
+      ctx.fillStyle = '#ff453a'; ctx.beginPath(); ctx.arc(0, 16, 3, 0, Math.PI); ctx.fill();
+      break;
+    }
+    case 'robot': {
+      ctx.strokeStyle = '#aaa'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -R); ctx.lineTo(0, -R - 12); ctx.stroke();
+      ctx.fillStyle = Math.floor(t * 3) % 2 ? '#ff453a' : '#400'; ctx.beginPath(); ctx.arc(0, -R - 14, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = c; ctx.fillRect(-R, -R, R * 2, R * 2);
+      ctx.fillStyle = '#1c1c1e'; ctx.fillRect(-R * 0.8, -R * 0.45, R * 1.6, R * 0.4); // バイザー
+      const sx = Math.sin(t * 3) * R * 0.55;
+      ctx.fillStyle = p2 ? '#ff9f0a' : '#ff453a'; ctx.fillRect(sx - 6, -R * 0.38, 12, R * 0.26);
+      ctx.fillStyle = '#1c1c1e'; for (let i = -2; i <= 2; i++) ctx.fillRect(i * 9 - 3, R * 0.35, 6, R * 0.4);
+      break;
+    }
+    default: { // king
+      heartPath(0, 4, R * 2.1); ctx.fillStyle = c; ctx.fill();
+      ctx.fillStyle = '#ffd60a'; // 王冠
+      ctx.beginPath(); ctx.moveTo(-18, -R * 0.55); ctx.lineTo(-18, -R * 0.95); ctx.lineTo(-9, -R * 0.75); ctx.lineTo(0, -R * 1.1);
+      ctx.lineTo(9, -R * 0.75); ctx.lineTo(18, -R * 0.95); ctx.lineTo(18, -R * 0.55); ctx.closePath(); ctx.fill();
+      eyes(12, -2, 5, '#fff');
+      ctx.fillStyle = p2 ? '#ff453a' : '#000'; ctx.beginPath(); ctx.arc(-12, -1, 2.5, 0, Math.PI * 2); ctx.arc(12, -1, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  if (b.flash && !b.dead) { // 被弾で白く光る
+    ctx.globalAlpha = 0.6; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ストーリーのUI（ボスのHP・ステージ・セリフ）
+function drawStoryUI(now) {
+  const b = G.boss;
+  ctx.textBaseline = 'middle';
+  if (b) {
+    ctx.font = '13px DotGothic16, monospace'; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+    ctx.fillText(`STAGE ${b.stage + 1}/${G.cfg[3]}  ${b.name}`, 60, 14);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#aaa';
+    ctx.fillText(diffOf().name, 420, 14);
+    const pct = b.max ? b.hp / b.max : 0;
+    ctx.fillStyle = '#400'; ctx.fillRect(60, 24, 360, 9);
+    ctx.fillStyle = pct > 0.5 ? '#32d74b' : pct > 0.2 ? '#ffd60a' : '#ff453a';
+    ctx.fillRect(60, 24, 360 * pct, 9);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(60, 24, 360, 9);
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.moveTo(240, 22); ctx.lineTo(240, 35); ctx.stroke(); // 第2形態の境目
+  }
+  // セリフ（Undertale風の文字送り）
+  const tk = G.talk;
+  if (tk && now < tk.until) {
+    const shown = tk.text.slice(0, Math.floor((now - tk.start) / 35) + 1);
+    ctx.globalAlpha = 0.9; ctx.fillStyle = '#000'; ctx.fillRect(16, 156, 448, 44);
+    ctx.globalAlpha = 1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(16, 156, 448, 44);
+    ctx.fillStyle = '#fff'; ctx.font = '15px DotGothic16, monospace'; ctx.textAlign = 'left';
+    ctx.fillText(shown, 28, 178, 424);
+  }
 }
 
 function drawAim(now) {
@@ -971,13 +1176,16 @@ function loop(t) {
   draw();
   if (roomId && t - plistTimer > 200) {
     plistTimer = t; updatePlist(); updateLobbyNote();
+    // ストーリーではボスのHPバーと重ならないよう、縦画面のプレイヤー一覧をボックスの下側へ
+    if (L.portrait) $('plist').style.top = (G.md === 'story' && G.st !== 'lobby'
+      ? L.by + L.bs - $('plist').offsetHeight - 8 : L.by + 6) + 'px';
     // 観戦バナー（途中参加 or 脱落）
     const r = G.roster.get(myId), banner = $('specBanner');
     const watching = (G.st === 'play' || G.st === 'countdown') && !me.alive;
     banner.classList.toggle('hidden', !watching);
     if (watching) {
       banner.textContent = r && r.spec ? '観戦中 — 次の試合から参戦します' : '脱落… 観戦中（次の試合を待とう）';
-      banner.style.top = (L.by + 30) + 'px';
+      banner.style.top = (L.by + (G.md === 'story' ? 46 : 30)) + 'px';
     }
   } else if (!roomId) $('specBanner').classList.add('hidden');
   requestAnimationFrame(loop);
