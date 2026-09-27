@@ -299,75 +299,128 @@ const L = { w: 0, h: 0, bx: 0, by: 0, bs: 300, sc: 1, fire: { x: 0, y: 0, r: 46 
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   keys.add(e.code);
-  if ((e.code === 'Space' || e.code === 'KeyZ' || e.code === 'KeyJ') && !e.repeat) tryFire();
+  if ((e.code === 'Space' || e.code === 'KeyZ' || e.code === 'KeyJ') && !e.repeat) tryFire(keyboardAimAngle());
   if (e.code === 'Enter' && G.st === 'lobby' && roomId && !e.repeat) (!isPublic && amHost() ? $('btnStart') : $('btnReady')).click();
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
-addEventListener('blur', () => keys.clear());
 
-// スティック感度（1〜10、標準5）。最高速に達するまでに必要な倒し幅だけを変える
-let sens = clamp(parseInt(store.get('sb_sens', '5'), 10) || 5, 1, 10);
-const stickReach = () => L.stickR * (1.6 - sens * 0.12); // 1:1.48倍 / 5:1.0倍 / 10:0.4倍
-function applySens(v) {
-  sens = clamp(parseInt(v, 10) || 5, 1, 10);
-  store.set('sb_sens', String(sens));
-  document.querySelectorAll('.sensIn').forEach(el => { el.value = sens; });
-  document.querySelectorAll('.sensVal').forEach(el => { el.textContent = sens; });
+// ===== スティック感度 =====
+// 全体: 最高速に達するまでの倒し幅 / 横・縦: その軸だけの効き具合。どの設定でも最高速は同じ（ベクトル長を1で頭打ち）
+const SENS_DEF = [
+  { k: 'all', label: '全体の感度', hint: '高いほど少し倒すだけで最高速に' },
+  { k: 'x', label: '横（左右）の感度', hint: '高いほど左右に速く反応' },
+  { k: 'y', label: '縦（上下）の感度', hint: '高いほど上下に速く反応' },
+];
+const sens = {};
+for (const d of SENS_DEF) sens[d.k] = clamp(parseInt(store.get(d.k === 'all' ? 'sb_sens' : 'sb_sens_' + d.k, '5'), 10) || 5, 1, 10);
+const stickReach = () => L.stickR * (1.6 - sens.all * 0.12);   // 1:1.48倍 / 5:1.0倍 / 10:0.4倍
+const axisMul = (lv) => 0.6 + lv * 0.08;                          // 1:0.68倍 / 5:1.0倍 / 10:1.4倍
+const STICK_DEAD = 6;
+// 各軸で最高速になる倒し幅（px）。点線の楕円として表示する
+const stickReachXY = () => {
+  const r = stickReach() - STICK_DEAD;
+  return { rx: STICK_DEAD + r / axisMul(sens.x), ry: STICK_DEAD + r / axisMul(sens.y) };
+};
+function buildSensUI() {
+  document.querySelectorAll('.sensBox').forEach(box => {
+    box.innerHTML = SENS_DEF.map(d => `
+      <div class="sens">
+        <label>${d.label} <b class="sensVal" data-k="${d.k}">${sens[d.k]}</b></label>
+        <input type="range" class="sensIn" data-k="${d.k}" min="1" max="10" step="1" value="${sens[d.k]}">
+        <p class="sensHint">${d.hint}</p>
+      </div>`).join('') + '<button class="btn sensReset" type="button">感度を標準（5）に戻す</button>';
+  });
 }
-document.querySelectorAll('.sensIn').forEach(el => el.addEventListener('input', () => applySens(el.value)));
-applySens(sens);
-$('btnSettings').onclick = () => { releaseStick(); show('settings'); };
+function setSens(k, v) {
+  sens[k] = clamp(parseInt(v, 10) || 5, 1, 10);
+  store.set(k === 'all' ? 'sb_sens' : 'sb_sens_' + k, String(sens[k]));
+  document.querySelectorAll(`.sensIn[data-k="${k}"]`).forEach(el => { el.value = sens[k]; });
+  document.querySelectorAll(`.sensVal[data-k="${k}"]`).forEach(el => { el.textContent = sens[k]; });
+}
+buildSensUI();
+document.addEventListener('input', (e) => { if (e.target.classList.contains('sensIn')) setSens(e.target.dataset.k, e.target.value); });
+document.addEventListener('click', (e) => { if (e.target.classList.contains('sensReset')) SENS_DEF.forEach(d => setSens(d.k, 5)); });
+$('btnSettings').onclick = () => { resetInput(); show('settings'); };
 $('btnSettingsClose').onclick = () => hide('settings');
 
-// スティック入力
+// ===== タッチ入力（スティック + SHOTボタン） =====
 // スマホは Touch Events で指ごとに追跡し、毎イベントで「その指がまだ画面にあるか」を確認する。
 // （指を離したイベントを取りこぼしても、次のタッチ操作で必ず解除される＝入りっぱなし防止）
+// SHOTボタン: タップ＝一番近い敵を自動で狙う / スライド＝その方向に撃つ / スライドして中央に戻す＝キャンセル
+const AIM_TH = 16;
+const aim = { id: null, x: 0, y: 0, dragged: false, angle: 0 };
 let firePressed = 0;
-function stickDown(id, x, y) {
+const onFireBtn = (x, y) => Math.hypot(x - L.fire.x, y - L.fire.y) < L.fire.r * 1.35;
+
+function pointerDown(id, x, y) {
   if (!roomId) return;
   audioInit();
-  if (Math.hypot(x - L.fire.x, y - L.fire.y) < L.fire.r * 1.35) { tryFire(); firePressed = performance.now(); return; }
-  if (stick.id === null) { stick.id = id; stick.ox = stick.x = x; stick.oy = stick.y = y; stick.t = performance.now(); }
+  if (onFireBtn(x, y)) {
+    if (aim.id === null) { aim.id = id; aim.x = x; aim.y = y; aim.dragged = false; firePressed = performance.now(); }
+    return;
+  }
+  if (stick.id === null) { stick.id = id; stick.ox = stick.x = x; stick.oy = stick.y = y; }
 }
-function stickMove(id, x, y) {
+function pointerMove(id, x, y) {
+  if (id === aim.id) {
+    aim.x = x; aim.y = y;
+    const dx = x - L.fire.x, dy = y - L.fire.y;
+    if (Math.hypot(dx, dy) > AIM_TH) { aim.dragged = true; aim.angle = Math.atan2(dy, dx); }
+    return;
+  }
   if (id !== stick.id) return;
-  stick.x = x; stick.y = y; stick.t = performance.now();
+  stick.x = x; stick.y = y;
   // 指が離れすぎたら基点ごと追従（フローティングスティック）
-  const dx = stick.x - stick.ox, dy = stick.y - stick.oy, d = Math.hypot(dx, dy), lim = L.stickR * 1.6;
+  const { rx, ry } = stickReachXY();
+  const dx = stick.x - stick.ox, dy = stick.y - stick.oy, d = Math.hypot(dx, dy), lim = Math.max(L.stickR * 1.6, rx + 10, ry + 10);
   if (d > lim) { stick.ox = stick.x - dx / d * lim; stick.oy = stick.y - dy / d * lim; }
 }
+function pointerUp(id) {
+  if (id === aim.id) {
+    const inCenter = Math.hypot(aim.x - L.fire.x, aim.y - L.fire.y) <= AIM_TH;
+    if (!aim.dragged) tryFire(autoAimAngle());
+    else if (!inCenter) tryFire(aim.angle);
+    else toast('ショットをキャンセル');
+    aim.id = null;
+  }
+  if (id === stick.id) releaseStick();
+}
 function releaseStick() { stick.id = null; }
+function cancelAim() { aim.id = null; }
 function syncTouches(e) {
-  if (stick.id === null || stick.id === 'mouse') return;
-  for (const t of e.touches) if (t.identifier === stick.id) return;
-  releaseStick();
+  const alive = new Set([...e.touches].map(t => t.identifier));
+  if (stick.id !== null && stick.id !== 'mouse' && !alive.has(stick.id)) releaseStick();
+  if (aim.id !== null && aim.id !== 'mouse' && !alive.has(aim.id)) cancelAim(); // 取りこぼし時は誤射しない
 }
 
 cv.addEventListener('touchstart', (e) => {
   e.preventDefault();
   syncTouches(e);
-  for (const t of e.changedTouches) stickDown(t.identifier, t.clientX, t.clientY);
+  for (const t of e.changedTouches) pointerDown(t.identifier, t.clientX, t.clientY);
 }, { passive: false });
 addEventListener('touchmove', (e) => {
+  for (const t of e.changedTouches) pointerMove(t.identifier, t.clientX, t.clientY);
   syncTouches(e);
-  for (const t of e.changedTouches) stickMove(t.identifier, t.clientX, t.clientY);
   if (e.target === cv) e.preventDefault();
 }, { passive: false });
-const touchEnd = (e) => {
-  for (const t of e.changedTouches) if (t.identifier === stick.id) releaseStick();
-  syncTouches(e);
-};
-addEventListener('touchend', touchEnd);
-addEventListener('touchcancel', touchEnd);
+addEventListener('touchend', (e) => { for (const t of e.changedTouches) pointerUp(t.identifier); syncTouches(e); });
+addEventListener('touchcancel', (e) => { for (const t of e.changedTouches) { if (t.identifier === aim.id) cancelAim(); if (t.identifier === stick.id) releaseStick(); } syncTouches(e); });
 
-// PC（マウス）
-cv.addEventListener('mousedown', (e) => { if (e.button === 0) stickDown('mouse', e.clientX, e.clientY); });
-addEventListener('mousemove', (e) => { if (stick.id === 'mouse') { if (!(e.buttons & 1)) releaseStick(); else stickMove('mouse', e.clientX, e.clientY); } });
-addEventListener('mouseup', () => { if (stick.id === 'mouse') releaseStick(); });
+// PC（マウス）: SHOTボタンをドラッグで狙える。Space/Z はマウスカーソルの方向へ（ボックス外なら自動エイム）
+const mouse = { x: -1, y: -1 };
+cv.addEventListener('mousedown', (e) => { if (e.button === 0) pointerDown('mouse', e.clientX, e.clientY); });
+addEventListener('mousemove', (e) => {
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  if (stick.id === 'mouse' || aim.id === 'mouse') {
+    if (!(e.buttons & 1)) { if (aim.id === 'mouse') cancelAim(); releaseStick(); }
+    else pointerMove('mouse', e.clientX, e.clientY);
+  }
+});
+addEventListener('mouseup', () => pointerUp('mouse'));
 
 // アプリ切替・通知・画面ロックなどで入力をリセット
-const resetInput = () => { releaseStick(); keys.clear(); };
+function resetInput() { releaseStick(); cancelAim(); keys.clear(); }
 addEventListener('blur', resetInput);
 addEventListener('pagehide', resetInput);
 document.addEventListener('visibilitychange', () => { if (document.hidden) resetInput(); });
@@ -378,8 +431,13 @@ function readInput() {
   let x = 0, y = 0;
   if (stick.id !== null) {
     const dx = stick.x - stick.ox, dy = stick.y - stick.oy, d = Math.hypot(dx, dy);
-    const dead = 6, reach = stickReach();
-    if (d > dead) { const m = Math.min(1, (d - dead) / (reach - dead)); x = dx / d * m; y = dy / d * m; }
+    if (d > STICK_DEAD) {
+      const span = stickReach() - STICK_DEAD, k = (d - STICK_DEAD) / d;
+      x = dx * k / span * axisMul(sens.x);
+      y = dy * k / span * axisMul(sens.y);
+      const m = Math.hypot(x, y);
+      if (m > 1) { x /= m; y /= m; } // 最高速は変えない
+    }
   }
   let kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
   let ky = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
@@ -388,12 +446,37 @@ function readInput() {
     x = kx / d * slow; y = ky / d * slow;
   }
   input.x = x; input.y = y;
+  if (Math.hypot(x, y) > 0.2) me.lastDir = Math.atan2(y, x);
 }
 
-function tryFire() {
+// 自動エイム：一番近い生存中の敵。いなければ最後に動いた方向（初期は上）
+function autoTarget() {
+  let best = null, bd = Infinity;
+  for (const [id, p] of G.players) {
+    if (id === myId || !p.alive) continue;
+    const d = Math.hypot(p.x - me.x, p.y - me.y);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+function autoAimAngle() {
+  const t = autoTarget();
+  if (t) return Math.atan2(t.y - me.y, t.x - me.x);
+  return me.lastDir ?? -Math.PI / 2;
+}
+function keyboardAimAngle() {
+  // マウスがボックス内にあればカーソル方向へ
+  if (mouse.x >= L.bx && mouse.x <= L.bx + L.bs && mouse.y >= L.by && mouse.y <= L.by + L.bs) {
+    const mx = (mouse.x - L.bx) / L.sc, my = (mouse.y - L.by) / L.sc;
+    return Math.atan2(my - me.y, mx - me.x);
+  }
+  return autoAimAngle();
+}
+
+function tryFire(angle) {
   if (!roomId || G.st !== 'play' || !me.alive) return;
   if (sNow() < me.cdEnd - 60) { sfx('deny'); return; }
-  socket.emit('fire');
+  socket.emit('fire', +angle.toFixed(3));
   me.cdEnd = sNow() + C.SHOT_CD; // 見た目の即時反映
 }
 
@@ -662,6 +745,9 @@ function draw() {
     }
   }
 
+  // 照準（SHOTボタン操作中）
+  if (aim.id !== null && G.st === 'play' && me.alive) drawAim(now);
+
   // パーティクル
   for (const p of G.particles) {
     const a = p.life / p.max;
@@ -730,6 +816,31 @@ function draw() {
   drawControls(now);
 }
 
+function drawAim(now) {
+  const ready = me.cdEnd - now <= 0;
+  const col = ready ? '#ffd60a' : '#888';
+  ctx.save();
+  if (!aim.dragged) {
+    // タップ＝自動エイム：狙う相手にマーカー
+    const t = autoTarget();
+    if (t) {
+      ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(t.x - 22, t.y); ctx.lineTo(t.x - 10, t.y); ctx.moveTo(t.x + 10, t.y); ctx.lineTo(t.x + 22, t.y);
+      ctx.moveTo(t.x, t.y - 22); ctx.lineTo(t.x, t.y - 10); ctx.moveTo(t.x, t.y + 10); ctx.lineTo(t.x, t.y + 22); ctx.stroke();
+    }
+    ctx.restore(); return;
+  }
+  if (Math.hypot(aim.x - L.fire.x, aim.y - L.fire.y) <= AIM_TH) { ctx.restore(); return; } // キャンセル位置
+  const len = 230, half = C.SHOT_SPREAD / 2;
+  ctx.globalAlpha = 0.25; ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(me.x, me.y);
+  ctx.arc(me.x, me.y, len, aim.angle - half, aim.angle + half); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 0.9; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
+  ctx.beginPath(); ctx.moveTo(me.x, me.y); ctx.lineTo(me.x + Math.cos(aim.angle) * len, me.y + Math.sin(aim.angle) * len); ctx.stroke();
+  ctx.restore();
+}
+
 function drawHpLine() {
   const y = L.by + L.bs + 20, x = L.bx;
   const r = G.roster.get(myId);
@@ -755,7 +866,8 @@ function drawControls(now) {
   ctx.beginPath(); ctx.arc(ox, oy, L.stickR, 0, Math.PI * 2); ctx.stroke();
   // 最高速になる位置（感度で変わる）を点線で表示
   ctx.setLineDash([4, 5]); ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(ox, oy, stickReach(), 0, Math.PI * 2); ctx.stroke();
+  const { rx, ry } = stickReachXY();
+  ctx.beginPath(); ctx.ellipse(ox, oy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
   ctx.setLineDash([]);
   let kx = ox, ky = oy;
   if (active) {
@@ -780,9 +892,18 @@ function drawControls(now) {
     ctx.strokeStyle = '#ff9f0a'; ctx.lineWidth = 6;
     ctx.beginPath(); ctx.arc(f.x, f.y, f.r - 7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - remain / C.SHOT_CD)); ctx.stroke();
   }
-  ctx.fillStyle = ready ? (pressed ? '#000' : '#ffd60a') : '#777';
+  let label = remain > 0 && G.st === 'play' ? (remain / 1000).toFixed(1) : 'SHOT', lx = f.x, ly = f.y;
+  if (aim.id !== null) {
+    const dx = aim.x - f.x, dy = aim.y - f.y, d = Math.hypot(dx, dy), k = d > f.r * 0.7 ? f.r * 0.7 / d : 1;
+    lx = f.x + dx * k; ly = f.y + dy * k;
+    const cancel = aim.dragged && d <= AIM_TH;
+    ctx.fillStyle = cancel ? '#ff453a' : ready ? '#ffd60a' : '#777';
+    ctx.beginPath(); ctx.arc(lx, ly, f.r * 0.45, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#000';
+    if (cancel) label = '×'; else if (!aim.dragged) label = 'AUTO';
+  } else ctx.fillStyle = ready ? (pressed ? '#000' : '#ffd60a') : '#777';
   ctx.font = '15px DotGothic16, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(remain > 0 && G.st === 'play' ? (remain / 1000).toFixed(1) : 'SHOT', f.x, f.y);
+  ctx.fillText(label, lx, ly);
 }
 
 // ===== ループ =====

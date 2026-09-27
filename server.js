@@ -21,11 +21,12 @@ const C = {
   SPEED: 170,              // 移動速度 px/s
   MAX_HP: 20,
   IFRAME: 1000,            // 被弾後の無敵時間 ms
-  SHOT_CD: 3000,           // プレイヤー全方位ショットのクールタイム ms
+  SHOT_CD: 2000,           // プレイヤーショット（狙い撃ち）のクールタイム ms
   GRAZE_CUT: 250,          // グレイズ1回でクールタイム短縮 ms
   GRAZE_R: 14,             // グレイズ判定の追加半径
-  SHOT_N: 16,              // 全方位ショットの弾数
-  SHOT_SPEED: 230,
+  SHOT_N: 5,               // 狙い撃ちの弾数（扇状）
+  SHOT_SPREAD: 0.5,        // 扇の開き（ラジアン、約29度）
+  SHOT_SPEED: 290,
   SHOT_DMG: 4,
   AUTO_DMG: 3,
   HEAL: 6,
@@ -327,17 +328,27 @@ class Room {
     }
   }
 
-  onFire(p, now) {
+  // 狙い撃ち：指定角度に扇状の弾を発射。角度がなければ一番近い敵を自動で狙う
+  onFire(p, now, angle) {
     if (!p.alive || this.state !== 'play' || now < p.cdUntil) return;
     p.cdUntil = now + C.SHOT_CD;
-    const off = Math.random() * Math.PI * 2;
+    let a0 = typeof angle === 'number' ? angle : NaN;
+    if (!Number.isFinite(a0)) {
+      let best = null, bd = Infinity;
+      for (const q of this.alivePlayers()) {
+        if (q === p) continue;
+        const d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (d < bd) { bd = d; best = q; }
+      }
+      a0 = best ? Math.atan2(best.y - p.y, best.x - p.x) : -Math.PI / 2;
+    }
     const list = [];
     for (let i = 0; i < C.SHOT_N; i++) {
-      const a = off + (i / C.SHOT_N) * Math.PI * 2;
-      list.push({ x: p.x, y: p.y, vx: Math.cos(a) * C.SHOT_SPEED, vy: Math.sin(a) * C.SHOT_SPEED, r: 6, t0: now + 40, life: 3500, kind: K.SHOT, owner: p.id });
+      const a = a0 + (C.SHOT_N > 1 ? (i / (C.SHOT_N - 1) - 0.5) * C.SHOT_SPREAD : 0);
+      list.push({ x: p.x, y: p.y, vx: Math.cos(a) * C.SHOT_SPEED, vy: Math.sin(a) * C.SHOT_SPEED, r: 6, t0: now + 40, life: 2500, kind: K.SHOT, owner: p.id });
     }
     this.spawn(list);
-    this.emit('fx', { t: 'fire', id: p.id, x: p.x, y: p.y });
+    this.emit('fx', { t: 'fire', id: p.id, x: p.x, y: p.y, a: a0 });
   }
 
   onGraze(p, now) {
@@ -507,7 +518,7 @@ io.on('connection', (socket) => {
   socket.on('ready', () => { if (room && me) room.toggleReady(me); });
   socket.on('pos', (d) => { if (room && me && d) room.onPos(me, d.x, d.y, d.m, Date.now()); });
   socket.on('hit', (bid) => { if (room && me) room.onHit(me, +bid, Date.now()); });
-  socket.on('fire', () => { if (room && me) room.onFire(me, Date.now()); });
+  socket.on('fire', (angle) => { if (room && me) room.onFire(me, Date.now(), angle); });
   socket.on('graze', () => { if (room && me) room.onGraze(me, Date.now()); });
   socket.on('emote', (e) => {
     const now = Date.now();
