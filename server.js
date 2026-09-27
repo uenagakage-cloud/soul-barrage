@@ -24,10 +24,21 @@ const C = {
   SHOT_CD: 2000,           // プレイヤーショット（狙い撃ち）のクールタイム ms
   GRAZE_CUT: 250,          // グレイズ1回でクールタイム短縮 ms
   GRAZE_R: 14,             // グレイズ判定の追加半径
-  SHOT_N: 3,               // 1回のショットで連射する単発弾の数
-  SHOT_INTERVAL: 140,      // 連射の間隔 ms
+  SHOT_N: 3,               // 正面に横並びで同時に出る弾の数
+  SHOT_GAP: 16,            // 横並びの弾の間隔 px
   SHOT_SPEED: 290,
   SHOT_DMG: 4,
+  // 必殺技メーター（0〜100）
+  SP_MAX: 100,
+  SP_TIME: 2.5,            // 生存中、1秒ごとに溜まる量
+  SP_HIT: 15,              // 相手に弾を当てたとき
+  SP_DAMAGED: 12,          // ダメージを受けたとき
+  SP_GRAZE: 1,             // グレイズしたとき
+  SP_WAVES: 2,             // 必殺技：全方位リングの波の数
+  SP_RING: 20,             // 1波あたりの弾数
+  SP_DMG: 5,
+  SP_CLEAR_R: 120,         // 必殺技で周囲の敵弾を消す半径
+  SP_INV: 1500,            // 必殺技発動時の無敵時間 ms
   AUTO_DMG: 3,
   HEAL: 6,
   MAX_PLAYERS: 8,
@@ -42,7 +53,7 @@ const LOBBY_AUTO = 15000;     // 公開ルームの自動スタートまで
 const COLORS = ['#ff2d55', '#ffd60a', '#32d74b', '#64d2ff', '#bf5af2', '#ff9f0a', '#ff6ec7', '#ffffff'];
 
 // 弾の種類
-const K = { NORMAL: 0, BIG: 1, SHOT: 2, BLUE: 3, ORANGE: 4 };
+const K = { NORMAL: 0, BIG: 1, SHOT: 2, BLUE: 3, ORANGE: 4, SP: 5 };
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -104,7 +115,7 @@ class Room {
     const p = {
       id: socket.id, token, name, color,
       x: C.W / 2, y: C.H / 2, moving: false,
-      hp: C.MAX_HP, alive: false, iframeUntil: 0, cdUntil: 0,
+      hp: C.MAX_HP, alive: false, iframeUntil: 0, cdUntil: 0, sp: 0,
       kills: saved ? saved.kills : 0, wins: saved ? saved.wins : 0, grazes: 0, roundKills: 0,
       deathAt: 0, lastPosAt: Date.now(), grazeWindow: [],
       ready: false, spectating: false,
@@ -173,7 +184,7 @@ class Room {
       p.x = C.W / 2 + Math.cos(a) * rr;
       p.y = C.H / 2 + Math.sin(a) * rr;
       p.hp = C.MAX_HP; p.alive = true; p.iframeUntil = 0; p.cdUntil = 0;
-      p.grazes = 0; p.roundKills = 0; p.deathAt = 0;
+      p.grazes = 0; p.roundKills = 0; p.deathAt = 0; p.sp = 0;
       p.ready = false; p.spectating = false;
     });
     this.mode = list.length >= 2 ? 'versus' : 'solo';
@@ -279,6 +290,7 @@ class Room {
           }
         }
       }
+      for (const p of this.alivePlayers()) this.addSp(p, C.SP_TIME * TICK / 1000); // 時間経過で溜まる
       const alive = this.alivePlayers().length;
       if ((this.mode === 'versus' && alive <= 1) || alive === 0) this.endRound(now);
     } else if (this.state === 'result') {
@@ -290,7 +302,7 @@ class Room {
 
     this.emit('s', {
       st: this.state, su: this.stateUntil, rs: this.roundStart, rd: this.round, md: this.mode, now,
-      p: [...this.players.values()].map(p => [p.id, Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10, p.hp, p.alive ? 1 : 0, Math.max(0, p.iframeUntil - now), Math.max(0, p.cdUntil - now)]),
+      p: [...this.players.values()].map(p => [p.id, Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10, p.hp, p.alive ? 1 : 0, Math.max(0, p.iframeUntil - now), Math.max(0, p.cdUntil - now), Math.floor(p.sp)]),
       it: this.items.map(it => [it.id, it.type, Math.round(it.x), Math.round(it.y)]),
     });
   }
@@ -310,14 +322,19 @@ class Room {
     p.x = x; p.y = y; p.moving = !!moving;
   }
 
+  addSp(p, v) { if (p && p.alive) p.sp = Math.min(C.SP_MAX, p.sp + v); }
+
   onHit(p, bid, now) {
     if (!p.alive || this.state !== 'play' || now < p.iframeUntil) return;
     const b = this.bullets.get(bid);
     if (!b || b.owner === p.id) return;
-    const dmg = b.kind === K.SHOT ? C.SHOT_DMG : b.kind === K.BIG ? C.AUTO_DMG + 1 : C.AUTO_DMG;
+    const dmg = b.kind === K.SP ? C.SP_DMG : b.kind === K.SHOT ? C.SHOT_DMG : b.kind === K.BIG ? C.AUTO_DMG + 1 : C.AUTO_DMG;
     p.hp = Math.max(0, p.hp - dmg);
     p.iframeUntil = now + C.IFRAME;
     if (b.owner) p.lastHitBy = b.owner;
+    // 必殺技メーター：食らった側と当てた側の両方に加算
+    this.addSp(p, C.SP_DAMAGED);
+    if (b.owner) this.addSp(this.players.get(b.owner), C.SP_HIT);
     this.emit('fx', { t: 'hit', id: p.id, by: b.owner, x: p.x, y: p.y });
     if (p.hp <= 0) {
       p.alive = false;
@@ -328,7 +345,7 @@ class Room {
     }
   }
 
-  // 狙い撃ち：指定角度に単発弾を連射。角度がなければ一番近い敵を自動で狙う
+  // 狙い撃ち：指定角度（正面）に横並びの弾を同時発射。角度がなければ一番近い敵を自動で狙う
   onFire(p, now, angle) {
     if (!p.alive || this.state !== 'play' || now < p.cdUntil) return;
     p.cdUntil = now + C.SHOT_CD;
@@ -342,16 +359,30 @@ class Room {
       }
       a0 = best ? Math.atan2(best.y - p.y, best.x - p.x) : -Math.PI / 2;
     }
-    // 単発を SHOT_INTERVAL ごとに連射。2発目以降はその時点の自分の位置から撃つ
-    const round = this.round;
-    const shoot = () => {
-      if (!p.alive || this.state !== 'play' || this.round !== round || !this.players.has(p.id)) return;
-      this.spawn([{ x: p.x, y: p.y, vx: Math.cos(a0) * C.SHOT_SPEED, vy: Math.sin(a0) * C.SHOT_SPEED, r: 6, t0: Date.now() + 40, life: 2500, kind: K.SHOT, owner: p.id }]);
-      this.emit('fx', { t: 'fire', id: p.id, x: p.x, y: p.y, a: a0 });
-    };
+    const cos = Math.cos(a0), sin = Math.sin(a0), list = [];
     for (let i = 0; i < C.SHOT_N; i++) {
-      if (i === 0) shoot(); else setTimeout(shoot, i * C.SHOT_INTERVAL);
+      const off = (i - (C.SHOT_N - 1) / 2) * C.SHOT_GAP; // 進行方向に垂直にずらす
+      list.push({ x: p.x - sin * off, y: p.y + cos * off, vx: cos * C.SHOT_SPEED, vy: sin * C.SHOT_SPEED, r: 6, t0: now + 40, life: 2500, kind: K.SHOT, owner: p.id });
     }
+    this.spawn(list);
+    this.emit('fx', { t: 'fire', id: p.id, x: p.x, y: p.y, a: a0 });
+  }
+
+  // 必殺技「ソウルバースト」：メーターを全部使い、全方位リング弾＋周囲の敵弾を消去＋短い無敵
+  onSpecial(p, now) {
+    if (!p.alive || this.state !== 'play' || p.sp < C.SP_MAX) return;
+    p.sp = 0;
+    p.iframeUntil = Math.max(p.iframeUntil, now + C.SP_INV);
+    const list = [];
+    for (let w = 0; w < C.SP_WAVES; w++) {
+      const off = w * Math.PI / C.SP_RING;
+      for (let i = 0; i < C.SP_RING; i++) {
+        const a = off + (i / C.SP_RING) * Math.PI * 2;
+        list.push({ x: p.x, y: p.y, vx: Math.cos(a) * 200, vy: Math.sin(a) * 200, r: 9, t0: now + 60 + w * 250, life: 3000, kind: K.SP, owner: p.id });
+      }
+    }
+    this.spawn(list);
+    this.emit('fx', { t: 'special', id: p.id, x: p.x, y: p.y, r: C.SP_CLEAR_R, inv: C.SP_INV });
   }
 
   onGraze(p, now) {
@@ -361,6 +392,7 @@ class Room {
     p.grazeWindow.push(now);
     p.grazes++;
     p.cdUntil = Math.max(now, p.cdUntil - C.GRAZE_CUT);
+    this.addSp(p, C.SP_GRAZE);
   }
 }
 
@@ -522,6 +554,7 @@ io.on('connection', (socket) => {
   socket.on('pos', (d) => { if (room && me && d) room.onPos(me, d.x, d.y, d.m, Date.now()); });
   socket.on('hit', (bid) => { if (room && me) room.onHit(me, +bid, Date.now()); });
   socket.on('fire', (angle) => { if (room && me) room.onFire(me, Date.now(), angle); });
+  socket.on('special', () => { if (room && me) room.onSpecial(me, Date.now()); });
   socket.on('graze', () => { if (room && me) room.onGraze(me, Date.now()); });
   socket.on('emote', (e) => {
     const now = Date.now();

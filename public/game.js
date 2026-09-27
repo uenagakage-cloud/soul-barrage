@@ -5,7 +5,7 @@
 const $ = (id) => document.getElementById(id);
 const cv = $('cv'), ctx = cv.getContext('2d');
 const COLORS = ['#ff2d55', '#ffd60a', '#32d74b', '#64d2ff', '#bf5af2', '#ff9f0a', '#ff6ec7', '#ffffff'];
-const K = { NORMAL: 0, BIG: 1, SHOT: 2, BLUE: 3, ORANGE: 4 };
+const K = { NORMAL: 0, BIG: 1, SHOT: 2, BLUE: 3, ORANGE: 4, SP: 5 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = {
@@ -61,7 +61,8 @@ const G = {
   particles: [], texts: [], emotes: new Map(),
   result: null,
 };
-const me = { x: 240, y: 240, invUntil: 0, needSnap: true, moving: false, lastSend: 0, cdEnd: 0, hp: 20, alive: false };
+const me = { x: 240, y: 240, invUntil: 0, needSnap: true, moving: false, lastSend: 0, cdEnd: 0, hp: 20, alive: false, sp: 0 };
+let spPressed = 0;
 let shake = 0, flash = 0;
 
 socket.on('roster', (list) => {
@@ -80,14 +81,16 @@ socket.on('s', (s) => {
   const prevSt = G.st;
   G.st = s.st; G.su = s.su; G.rs = s.rs; G.rd = s.rd; G.md = s.md;
   const seen = new Set();
-  for (const [id, x, y, hp, alive, inv, cd] of s.p) {
+  for (const [id, x, y, hp, alive, inv, cd, sp] of s.p) {
     seen.add(id);
     let p = G.players.get(id);
     if (!p) { p = { x, y, tx: x, ty: y }; G.players.set(id, p); }
-    p.tx = x; p.ty = y; p.hp = hp; p.alive = !!alive; p.inv = inv; p.cd = cd;
+    p.tx = x; p.ty = y; p.hp = hp; p.alive = !!alive; p.inv = inv; p.cd = cd; p.sp = sp;
     if (id === myId) {
       me.hp = hp; me.alive = !!alive;
       me.cdEnd = sNow() + cd;
+      if (sp >= C.SP_MAX && me.sp < C.SP_MAX && G.st === 'play' && performance.now() - spPressed > 600) { sfx('spReady'); toast('必殺技ゲージMAX！ SPボタンで発動'); }
+      me.sp = sp;
       if (me.needSnap || !alive || G.st !== 'play') { me.x = x; me.y = y; }
       if (G.st === 'play' && me.needSnap) me.needSnap = false;
     }
@@ -123,6 +126,19 @@ socket.on('fx', (f) => {
     burst(f.x, f.y, f.item === 'heal' ? '#32d74b' : '#ffd60a', 12, 90);
     G.texts.push({ x: f.x, y: f.y - 12, text: f.item === 'heal' ? 'HP UP' : 'CHARGE!', color: f.item === 'heal' ? '#32d74b' : '#ffd60a', life: 1 });
     if (f.id === myId) sfx('item');
+  } else if (f.t === 'special') {
+    // 周囲の敵弾を消す（自分の弾は残す）
+    const now = sNow();
+    for (const [bid, b] of G.bullets) {
+      if (b.owner === f.id) continue;
+      bulletPos(b, now);
+      if (b.t >= 0 && Math.hypot(b.x - f.x, b.y - f.y) < f.r) { burst(b.x, b.y, '#fff', 2, 60); G.bullets.delete(bid); }
+    }
+    G.particles.push({ x: f.x, y: f.y, ring: true, big: f.r, life: 0.5, max: 0.5, color: col, size: 0 });
+    G.texts.push({ x: f.x, y: f.y - 24, text: 'SOUL BURST!', color: col, life: 1.2 });
+    shake = Math.max(shake, 8);
+    if (f.id === myId) { me.invUntil = Math.max(me.invUntil, now + f.inv); vibrate([30, 30, 60]); }
+    sfx('special');
   } else if (f.t === 'emote') {
     G.emotes.set(f.id, { e: f.e, until: performance.now() + 1800 });
     sfx('emote');
@@ -300,6 +316,7 @@ addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   keys.add(e.code);
   if ((e.code === 'Space' || e.code === 'KeyZ' || e.code === 'KeyJ') && !e.repeat) tryFire(keyboardAimAngle());
+  if ((e.code === 'KeyX' || e.code === 'KeyK') && !e.repeat) trySpecial();
   if (e.code === 'Enter' && G.st === 'lobby' && roomId && !e.repeat) (!isPublic && amHost() ? $('btnStart') : $('btnReady')).click();
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
@@ -352,10 +369,12 @@ const AIM_TH = 16;
 const aim = { id: null, x: 0, y: 0, dragged: false, angle: 0 };
 let firePressed = 0;
 const onFireBtn = (x, y) => Math.hypot(x - L.fire.x, y - L.fire.y) < L.fire.r * 1.35;
+const onSpBtn = (x, y) => L.sp && Math.hypot(x - L.sp.x, y - L.sp.y) < L.sp.r * 1.3;
 
 function pointerDown(id, x, y) {
   if (!roomId) return;
   audioInit();
+  if (onSpBtn(x, y)) { trySpecial(); return; }
   if (onFireBtn(x, y)) {
     if (aim.id === null) { aim.id = id; aim.x = x; aim.y = y; aim.dragged = false; firePressed = performance.now(); }
     return;
@@ -473,6 +492,14 @@ function keyboardAimAngle() {
   return autoAimAngle();
 }
 
+function trySpecial() {
+  spPressed = performance.now();
+  if (!roomId || G.st !== 'play' || !me.alive) return;
+  if (me.sp < C.SP_MAX) { sfx('deny'); return; }
+  socket.emit('special');
+  me.sp = 0; // 見た目の即時反映
+}
+
 function tryFire(angle) {
   if (!roomId || G.st !== 'play' || !me.alive) return;
   if (sNow() < me.cdEnd - 60) { sfx('deny'); return; }
@@ -529,6 +556,8 @@ function sfx(n) {
     case 'deny': tone(120, 0.08, 'square', 0.04); break;
     case 'tick': tone(440, 0.08, 'square', 0.06); break;
     case 'go': tone(880, 0.25, 'square', 0.07); break;
+    case 'spReady': [660, 880, 1100].forEach((f, i) => tone(f, 0.1, 'triangle', 0.06, 0, i * 0.08)); break;
+    case 'special': tone(200, 0.5, 'sawtooth', 0.09, 800); tone(100, 0.6, 'square', 0.07, -40, 0.05); break;
     case 'emote': tone(1000, 0.05, 'triangle', 0.04); break;
     case 'win': [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.15, 'square', 0.06, 0, i * 0.12)); break;
     case 'end': [392, 330, 262].forEach((f, i) => tone(f, 0.2, 'square', 0.05, 0, i * 0.15)); break;
@@ -551,6 +580,7 @@ function resize() {
     L.bx = (L.w - L.bs) / 2; L.by = top + Math.max(0, (avail - L.bs) / 2);
     const cy = L.h - ctrlH / 2 - 4;
     L.fire = { x: L.w - 78, y: cy, r: 44 };
+    L.sp = { x: L.fire.x - 72, y: cy - 46, r: 27 };
     L.stickHome = { x: 88, y: cy };
     plist.style.cssText = `left:${L.bx + 6}px;top:${L.by + 6}px;opacity:.75`;
     em.style.cssText = `left:50%;transform:translateX(-50%);bottom:calc(6px + env(safe-area-inset-bottom))`;
@@ -558,6 +588,7 @@ function resize() {
     L.bs = Math.max(160, Math.min(L.h - top - hpLine - 10, L.w - 360));
     L.bx = (L.w - L.bs) / 2; L.by = top;
     L.fire = { x: L.w - 86, y: L.h - 96, r: 48 };
+    L.sp = { x: L.fire.x - 78, y: L.fire.y - 50, r: 30 };
     L.stickHome = { x: 100, y: L.h - 110 };
     plist.style.cssText = `left:12px;top:${top + 6}px`;
     em.style.cssText = `right:12px;top:${top + 6}px`;
@@ -618,7 +649,7 @@ function update(dt) {
         me.invUntil = now + C.IFRAME;
         shake = 10; flash = 0.25;
         vibrate(70); sfx('hurt');
-        if (b.kind === K.SHOT) G.bullets.delete(id);
+        if (b.kind === K.SHOT || b.kind === K.SP) G.bullets.delete(id);
       }
     } else if (d < b.r + C.SOUL_R + C.GRAZE_R && !b.grazed && harmful && !invincible) {
       b.grazed = true;
@@ -708,7 +739,12 @@ function draw() {
   // 弾
   for (const b of G.bullets.values()) {
     if (b.t < 0) continue;
-    if (b.kind === K.SHOT) {
+    if (b.kind === K.SP) {
+      ctx.fillStyle = colorOf(b.owner);
+      ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 1.6, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.5, 0, Math.PI * 2); ctx.fill();
+    } else if (b.kind === K.SHOT) {
       ctx.fillStyle = colorOf(b.owner);
       ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#fff';
@@ -754,7 +790,7 @@ function draw() {
     ctx.globalAlpha = a;
     if (p.ring) {
       ctx.strokeStyle = p.color; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(p.x, p.y, 10 + (1 - a) * 40, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 10 + (1 - a) * (p.big || 40), 0, Math.PI * 2); ctx.stroke();
     } else if (p.shard) {
       ctx.fillStyle = p.color; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.life * 8);
       ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size); ctx.restore();
@@ -835,7 +871,12 @@ function drawAim(now) {
   // 単発の弾道を1本の線で表示
   const len = 230;
   ctx.globalAlpha = 0.9; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
-  ctx.beginPath(); ctx.moveTo(me.x, me.y); ctx.lineTo(me.x + Math.cos(aim.angle) * len, me.y + Math.sin(aim.angle) * len); ctx.stroke();
+  const ca = Math.cos(aim.angle), sa = Math.sin(aim.angle);
+  for (let i = 0; i < C.SHOT_N; i++) {
+    const off = (i - (C.SHOT_N - 1) / 2) * C.SHOT_GAP, ox = -sa * off, oy = ca * off;
+    ctx.globalAlpha = off === 0 ? 0.9 : 0.5;
+    ctx.beginPath(); ctx.moveTo(me.x + ox, me.y + oy); ctx.lineTo(me.x + ox + ca * len, me.y + oy + sa * len); ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -876,6 +917,21 @@ function drawControls(now) {
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(kx, ky, L.stickR * 0.42, 0, Math.PI * 2); ctx.fill();
   if (!active) { ctx.fillStyle = '#000'; ctx.font = '11px DotGothic16, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('MOVE', kx, ky); }
   ctx.globalAlpha = 1;
+
+  // SPボタン（必殺技ゲージ）
+  if (L.sp && G.st === 'play' && me.alive) {
+    const s = L.sp, full = me.sp >= C.SP_MAX, pulse = full ? 0.5 + 0.5 * Math.sin(performance.now() / 120) : 0;
+    const pr = performance.now() - spPressed < 120;
+    ctx.fillStyle = full ? (pr ? '#fff' : `rgba(191,90,242,${0.35 + pulse * 0.4})`) : '#111';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = full ? '#fff' : '#bf5af2';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, me.sp / C.SP_MAX)); ctx.stroke();
+    ctx.fillStyle = full ? '#fff' : '#bf5af2';
+    ctx.font = `${full ? 14 : 12}px DotGothic16, monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(full ? 'SP!' : Math.floor(me.sp) + '%', s.x, s.y);
+  }
 
   // SHOTボタン（クールタイムをリングで表示）
   const f = L.fire;
