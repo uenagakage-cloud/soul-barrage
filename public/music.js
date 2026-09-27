@@ -1,14 +1,16 @@
 // SOUL BARRAGE - ボスごとの専用BGM（Web Audio でその場で演奏するチップチューン。音声ファイル不要）
 //
+// 曲の構成：Aメロ(mel, 4小節) → Bメロ(melB, 4小節) の8小節をループ
 // 曲データの書き方（1小節 = 16トークン = 16分音符×16）
-//   mel   : メロディ。'C5' などの音名 / '-' 前の音を伸ばす / '.' 休符
+//   mel   : Aメロ。'C5' などの音名 / '-' 前の音を伸ばす / '.' 休符
+//   melB / chordsB / gtrB / drmB : Bメロ用（gtrB・drmB を省略すると Bメロ用の標準パターン / Aと同じドラム）
 //   chords: 小節ごとのコード（ベース・ギター・分散和音を自動生成）。'Am' 'F' 'C+' 'Bdim' など
 //   gtr   : 歪んだパワーコード（ギター）の刻み。X=強く / x=短く / -=伸ばす / .=なし
 //   bass  : ベースの刻み方 drive / rock16 / syncop / oompah / halftime
 //   drm   : ドラム。k=キック s=スネア h=ハイハット o=オープンハイハット t=タム .=なし
 //   lead  : メロディの音色 saw2(厚いノコギリ波) / pulse12・pulse25(細いパルス) / square / triangle
 //   harm  : 2周目以降に重ねるハモリの音程（半音。-5 = 4度下）
-// 演奏中の変化：ループの頭でクラッシュ、偶数ループはハモリ追加、4小節目にドラムのフィル。
+// 演奏中の変化：A・Bの頭でクラッシュ、Bメロは常にハモリ（Aメロは2周目以降）、Bへ入る前と曲の終わりにドラムのフィル。
 // 第2形態（ボスのHPが半分以下）ではテンポが上がり、半音上に転調する。
 (() => {
 'use strict';
@@ -26,6 +28,14 @@ const SONGS = {
     ],
     gtr: 'X . . x . x x . X . . x . x . x',
     drm: 'k . h . s . h k . k h . s . h h',
+    // --- Bメロ ---
+    chordsB: ['Am', 'C', 'D', 'B'],
+    melB: [
+      'A5 - - G5 A5 - C6 - B5 - A5 - G5 - E5 -',
+      'G5 - - F#5 G5 - C6 - B5 - G5 - E5 - C5 -',
+      'D5 . F#5 . A5 . D6 . C6 . B5 . A5 . F#5 .',
+      'B5 - - - A5 - - - F#5 - - - D#5 . B4 .',
+    ],
   },
   ghost: {
     title: 'フワリン「ファントム・ラン」', bpm: 164, lead: 'saw2', leadVol: 0.03, echo: true, harm: -5,
@@ -38,6 +48,14 @@ const SONGS = {
     ],
     gtr: 'X . x . X . x . X . x . X . x x',
     drm: 'k . h h s . h . k k h . s . h o',
+    // --- Bメロ ---
+    chordsB: ['Dm', 'Am', 'Bb', 'E'],
+    melB: [
+      'D6 - - C6 A5 - - F5 D5 . F5 . A5 . D6 .',
+      'C6 - - B5 A5 - - E5 C5 . E5 . A5 . C6 .',
+      'Bb5 - - A5 F5 - - D5 Bb4 . D5 . F5 . Bb5 .',
+      'B5 - - - G#5 - - - E5 . F5 . G#5 . B5 .',
+    ],
   },
   frog: {
     title: 'ピョンタ「ジャンピング・ビート」', bpm: 170, lead: 'pulse12', leadVol: 0.05, harm: -3,
@@ -50,6 +68,14 @@ const SONGS = {
     ],
     gtr: 'x x . x x . x . x x . x X . . .',
     drm: 'k . h k s . h . k . h k s . h h',
+    // --- Bメロ ---
+    chordsB: ['Bb', 'C', 'Am', 'A'],
+    melB: [
+      'F5 . . F5 . D5 . F5 . A5 . G5 . F5 . D5',
+      'E5 . . E5 . C5 . E5 . G5 . A5 . G5 . E5',
+      'C5 . E5 . A5 . E5 . C6 . B5 . A5 . E5 .',
+      'C#5 . E5 . A5 . C#6 . E6 - - - C#6 . A5 .',
+    ],
   },
   // ===== STAGE 2 =====
   knight: {
@@ -63,6 +89,15 @@ const SONGS = {
     ],
     gtr: 'X . x x . x x . X . x x . x x x',
     drm: 'k k h . s . h k k . h k s . h h',
+    // --- Bメロ ---
+    chordsB: ['Gm', 'Dm', 'Eb', 'A'],
+    gtrB: 'X - - - X - - - X - x x X - x x',
+    melB: [
+      'G5 - - - Bb5 - - - A5 - G5 - F5 - D5 -',
+      'F5 - - - A5 - - - G5 - F5 - E5 - D5 -',
+      'Eb5 - - - G5 - - - Bb5 - - - Eb6 - - -',
+      'E5 . E5 . A5 . A5 . C#6 . C#6 . E6 . . .',
+    ],
   },
   spider: {
     title: 'アラク「ヴェノム・ウェブ」', bpm: 150, lead: 'pulse25', leadVol: 0.05, stacc: true, harm: -5,
@@ -75,6 +110,14 @@ const SONGS = {
     ],
     gtr: 'X . . x . . X . . x . . X . x .',
     drm: 'k . h . s . h k . . h k s . h .',
+    // --- Bメロ ---
+    chordsB: ['C', 'Am', 'F', 'B'],
+    melB: [
+      'G5 - - E5 C5 - - E5 G5 . A5 . G5 . E5 .',
+      'A5 - - E5 C5 - - E5 A5 . B5 . C6 . A5 .',
+      'F5 . A5 . C6 . F6 . E6 . C6 . A5 . F5 .',
+      'D#5 - - - F#5 - - - B5 - - - A5 . F#5 .',
+    ],
   },
   snowman: {
     title: 'ユキダルマン「ブリザード・ドライブ」', bpm: 168, lead: 'pulse12', leadVol: 0.05, echo: true, harm: -5,
@@ -87,6 +130,14 @@ const SONGS = {
     ],
     gtr: 'X . x . x . X . x . X . x . x .',
     drm: 'k . h h s . h h k . h h s . h o',
+    // --- Bメロ ---
+    chordsB: ['Em', 'G', 'D', 'F#'],
+    melB: [
+      'E6 - - D6 B5 - - G5 E5 . G5 . B5 . D6 .',
+      'D6 - - B5 G5 - - D5 B4 . D5 . G5 . B5 .',
+      'A5 . F#5 . D5 . F#5 . A5 . D6 . F#6 . D6 .',
+      'C#6 - - - A#5 - - - F#5 - - - C#5 . . .',
+    ],
   },
   // ===== STAGE 3 =====
   witch: {
@@ -100,6 +151,15 @@ const SONGS = {
     ],
     gtr: 'X x . x X . x . X x . x X . x x',
     drm: 'k h s h k h s h k h s h k h s h',
+    // --- Bメロ ---
+    chordsB: ['Dm', 'G', 'C', 'E'],
+    gtrB: 'X x . x X x . x X x . x X x x x',
+    melB: [
+      'F5 . A5 . D6 . A5 . F5 . D5 . F5 . A5 .',
+      'G5 . B5 . D6 . B5 . G5 . D5 . G5 . B5 .',
+      'C6 - - B5 C6 - E6 - D6 - C6 - B5 - G5 -',
+      'G#5 . A5 . B5 . D6 . E6 - - - B5 . G#5 .',
+    ],
   },
   dragon: {
     title: 'ドラコ「ドラゴン・ハート」', bpm: 160, lead: 'saw2', leadVol: 0.03, echo: true, harm: -5,
@@ -112,6 +172,14 @@ const SONGS = {
     ],
     gtr: 'X - - - X - - - X - - x X . x .',
     drm: 'k . h . s . h . k k h . s . h h',
+    // --- Bメロ ---
+    chordsB: ['Fm', 'Cm', 'Ab', 'G'],
+    melB: [
+      'F5 - - - Ab5 - - - C6 - - Bb5 Ab5 - G5 -',
+      'Eb5 - - - G5 - - - C6 - - Bb5 G5 - Eb5 -',
+      'Ab5 - - G5 Ab5 - C6 - Eb6 - - - D6 - C6 -',
+      'B5 - - - G5 - - - D6 - - - F6 . G6 .',
+    ],
   },
   mage: {
     title: 'ライデン「サンダー・ストライク」', bpm: 190, lead: 'pulse12', leadVol: 0.05, harm: -5,
@@ -124,6 +192,14 @@ const SONGS = {
     ],
     gtr: 'x x x x X . x x x x x x X . x x',
     drm: 'k h s h k h s h k h s h k h s h',
+    // --- Bメロ ---
+    chordsB: ['Bm', 'E', 'A', 'C#'],
+    melB: [
+      'D6 . C#6 . B5 . F#5 . D6 . C#6 . B5 . D6 .',
+      'B5 . A5 . G#5 . E5 . B5 . A5 . G#5 . B5 .',
+      'C#6 . B5 . A5 . E5 . C#6 . E6 . A6 . E6 .',
+      'F6 - - - C#6 - - - G#5 . F5 . C#5 . F5 .',
+    ],
   },
   // ===== STAGE 4 =====
   robot: {
@@ -137,6 +213,14 @@ const SONGS = {
     ],
     gtr: 'X . . X . . X . . X . . X . X .',
     drm: 'k . h k s . h . k . h k s k h .',
+    // --- Bメロ ---
+    chordsB: ['Fm', 'Ab', 'Eb', 'G'],
+    melB: [
+      'F5 . F5 . Ab5 . F5 . C6 . Ab5 . F5 . Ab5 .',
+      'Ab5 . Ab5 . C6 . Ab5 . Eb6 . C6 . Ab5 . C6 .',
+      'G5 . G5 . Bb5 . G5 . Eb6 . Bb5 . G5 . Eb5 .',
+      'D6 . B5 . G5 . D5 . F5 . G5 . B5 . D6 .',
+    ],
   },
   mirror: {
     title: 'ミラージュ「クリスタル・ミラージュ」', bpm: 150, lead: 'pulse12', leadVol: 0.05, echo: true, harm: -5,
@@ -149,6 +233,15 @@ const SONGS = {
     ],
     gtr: '. . . . X - - - . . . . X - x .',
     drm: 'k . h . s . h . k . h . s . h h',
+    // --- Bメロ ---
+    chordsB: ['F', 'C', 'Bb', 'A'],
+    gtrB: 'X - - - - - - - X - - - X - x x',
+    melB: [
+      'A5 - - - C6 - - - F6 - - - E6 - C6 -',
+      'G5 - - - C6 - - - E6 - - - D6 - C6 -',
+      'D6 - - - F6 - - - D6 - Bb5 - F5 - D5 -',
+      'E5 - - - A5 - - - C#6 - - - E6 - - -',
+    ],
   },
   clown: {
     title: 'ピエロット「マッド・カーニバル」', bpm: 188, lead: 'square', leadVol: 0.04, harm: -5,
@@ -161,6 +254,14 @@ const SONGS = {
     ],
     gtr: 'X . x . X . x . X . x . X . x .',
     drm: 'k . s . k . s h k . s . k h s s',
+    // --- Bメロ ---
+    chordsB: ['C', 'G', 'Am', 'B'],
+    melB: [
+      'G5 F#5 G5 . E5 . C5 . E5 . G5 . C6 . . .',
+      'B5 A#5 B5 . G5 . D5 . G5 . B5 . D6 . . .',
+      'C6 B5 C6 . A5 . E5 . A5 . C6 . E6 . D#6 .',
+      'D#6 . B5 . F#5 . D#5 . F#5 . A5 . B5 . . .',
+    ],
   },
   // ===== STAGE 5 =====
   king: {
@@ -174,6 +275,14 @@ const SONGS = {
     ],
     gtr: 'X . x x X . x x X . x x X x x x',
     drm: 'k h s h k k s h k h s h k k s s',
+    // --- Bメロ ---
+    chordsB: ['Em', 'D', 'G', 'F#'],
+    melB: [
+      'G5 - - F#5 E5 - - D5 E5 - G5 - B5 - E6 -',
+      'F#5 - - E5 D5 - - C#5 D5 - F#5 - A5 - D6 -',
+      'B5 - - A5 G5 - - F#5 G5 - B5 - D6 - G6 -',
+      'F#6 - - - E6 - - - C#6 - - - A#5 - - -',
+    ],
   },
   angel: {
     title: 'ルシエル「フォールン・レクイエム」', bpm: 148, lead: 'saw2', leadVol: 0.03, vib: 5, echo: true, harm: -5,
@@ -186,6 +295,14 @@ const SONGS = {
     ],
     gtr: 'X . . x . . X . . x . . X . x x',
     drm: 'k . h . s . h k k . h . s . h h',
+    // --- Bメロ ---
+    chordsB: ['Bm', 'A', 'D', 'C#'],
+    melB: [
+      'D6 - - - C#6 - - - B5 - A5 - F#5 - D5 -',
+      'C#6 - - - B5 - - - A5 - E5 - C#5 - E5 -',
+      'F#5 - - - A5 - - - D6 - - - F#6 - - -',
+      'F6 - - - - - - - C#6 - - - G#5 - - -',
+    ],
   },
   void: {
     title: 'ヴォイド「アビス」', bpm: 120, lead: 'saw2', leadVol: 0.028, vib: 3, echo: true, harm: -6,
@@ -198,6 +315,14 @@ const SONGS = {
     ],
     gtr: 'X - - - - - x x X - - - - - x x',
     drm: 'k . . . . . . . s . . . . . k .',
+    // --- Bメロ ---
+    chordsB: ['Ab', 'Db', 'Gb', 'G'],
+    melB: [
+      'Eb5 - - - C5 - - - Ab4 - - - C5 - Eb5 -',
+      'F5 - - - Db5 - - - Ab4 - - - Db5 - F5 -',
+      'Gb5 - - - Db5 - - - Bb4 - - - Db5 - Gb5 -',
+      'G5 - - - B4 - - - D5 - - - F5 . G5 .',
+    ],
   },
 };
 
@@ -218,9 +343,12 @@ function chordOf(name) {
 const toks = (str) => { const t = str.trim().split(/\s+/).slice(0, 16); while (t.length < 16) t.push('.'); return t; };
 
 // 曲データを「ステップごとの発音リスト」に変換
+const GTR_B = 'X - - x X - - x X - - x X . x x'; // Bメロ標準：伸ばし気味のパワーコード
 function compile(song) {
-  const bars = song.mel.length, steps = bars * 16;
-  const mt = song.mel.flatMap(toks);
+  const melA = song.mel, melB = song.melB || [];
+  const barsA = melA.length, bars = barsA + melB.length, steps = bars * 16;
+  const chords = [...song.chords, ...(song.chordsB || [])];
+  const mt = [...melA, ...melB].flatMap(toks);
   const lead = new Array(steps).fill(null);
   for (let i = 0; i < steps; i++) {
     const midi = midiOf(mt[i]);
@@ -229,9 +357,12 @@ function compile(song) {
     while (i + len < steps && mt[i + len] === '-') len++;
     lead[i] = { midi, len };
   }
-  const gt = toks(song.gtr), bass = new Array(steps).fill(null), gtr = new Array(steps).fill(null), arp = new Array(steps).fill(null);
+  const gtA = toks(song.gtr), gtB = toks(song.gtrB || GTR_B);
+  const dmA = toks(song.drm), dmB = toks(song.drmB || song.drm);
+  const bass = new Array(steps).fill(null), gtr = new Array(steps).fill(null), arp = new Array(steps).fill(null), drm = new Array(steps).fill('.');
   for (let b = 0; b < bars; b++) {
-    const ch = chordOf(song.chords[b % song.chords.length]);
+    const isB = b >= barsA, gt = isB ? gtB : gtA, dm = isB ? dmB : dmA;
+    const ch = chordOf(chords[b % chords.length]);
     const r1 = 28 + ((ch.root + 8) % 12), r2 = r1 + 12; // ベースは E1〜D#2 あたりに収める
     for (let s = 0; s < 16; s++) {
       const i = b * 16 + s;
@@ -244,6 +375,7 @@ function compile(song) {
         case 'halftime': if (s === 0) n = { midi: r1, len: 6 }; else if (s === 6 || s === 7) n = { midi: r1, len: 1 }; else if (s === 10) n = { midi: r1 + 1, len: 6 }; break;
       }
       bass[i] = n;
+      drm[i] = dm[s];
       // ギター（パワーコード＝ルート+5度+オクターブ）
       const g = gt[s];
       if (g === 'X' || g === 'x') {
@@ -257,7 +389,7 @@ function compile(song) {
       }
     }
   }
-  return { steps, lead, bass, gtr, arp, drm: toks(song.drm) };
+  return { steps, barsA, bars, lead, bass, gtr, arp, drm };
 }
 
 // ===== 演奏エンジン =====
@@ -402,7 +534,7 @@ function schedule(horizon) {
     if (L) {
       const dur = L.len * stepDur * (song.stacc ? 0.5 : 0.92);
       leadNote(bus, t, L.midi + tr, dur, song, song.leadVol);
-      if (loop % 2 === 1 && song.harm) leadNote(bus, t, L.midi + tr + song.harm, dur, song, song.leadVol * 0.55);
+      if (song.harm && (bar >= data.barsA || loop % 2 === 1)) leadNote(bus, t, L.midi + tr + song.harm, dur, song, song.leadVol * 0.55);
     }
     const B = data.bass[i];
     if (B) bassNote(bus, t, B.midi + tr, B.len * stepDur * 0.9, B.acc);
@@ -410,11 +542,11 @@ function schedule(horizon) {
     if (Gt) gtrHit(bus, t, Gt.root + tr, Gt.fifth, Gt.len * stepDur * (Gt.hard ? 0.95 : 0.55), Gt.hard);
     const A = data.arp[i];
     if (A) leadNote(bus, t, A.midi + tr, stepDur * 0.7, { lead: song.arp === 'square' ? 'pulse25' : 'triangle' }, song.arp === 'square' ? 0.012 : 0.03);
-    // ドラム：ループの頭でクラッシュ、2ループに1回は最後の小節の後半をフィルに
-    const fill = loop % 2 === 1 && bar === data.steps / 16 - 1 && s >= 12;
-    if (i === 0) drum(bus, t, 'c');
+    // ドラム：A・Bの頭でクラッシュ。Bへ入る直前（2周目以降）と曲の最後の小節の後半はフィル
+    const fill = s >= 12 && (bar === data.bars - 1 || (bar === data.barsA - 1 && loop % 2 === 1));
+    if (s === 0 && (bar === 0 || bar === data.barsA)) drum(bus, t, 'c');
     if (fill) { drum(bus, t, s % 2 ? 's' : 't', FILL_TOM[s]); if (s === 12) drum(bus, t, 'k'); }
-    else { const d = data.drm[s]; if (d && d !== '.') drum(bus, t, d, s % 4 === 0); }
+    else { const d = data.drm[i]; if (d && d !== '.') drum(bus, t, d, s % 4 === 0); }
     cur.nextT += stepDur;
     cur.step++;
   }
@@ -455,12 +587,12 @@ function setVolume(v) {
 }
 
 // 検証用：曲をオフラインで書き出して音量を測る（スピーカー不要）
-async function render(key, seconds = 4, phase = 1) {
+async function render(key, seconds = 4, phase = 1, startBar = 0) {
   const saved = { AC, master, noise, waves, shaperCurve, cur, timer };
   const off = new OfflineAudioContext(1, Math.ceil(44100 * seconds), 44100);
   AC = null; master = null; ensureOut(off);
   const song = SONGS[key];
-  cur = { key, song, data: compile(song), step: 0, nextT: 0.05, phase, bus: makeBus(song, 60 / song.bpm / 4) };
+  cur = { key, song, data: compile(song), step: startBar * 16, nextT: 0.05, phase, bus: makeBus(song, 60 / song.bpm / 4) };
   schedule(seconds);
   ({ AC, master, noise, waves, shaperCurve, cur, timer } = saved);
   return off.startRendering();
