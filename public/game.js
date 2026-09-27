@@ -62,7 +62,6 @@ const G = {
   result: null,
   cfg: ['battle', 1, 0, 5], // [ゲーム種別, 難易度, ストーリーの現在ステージ, 全ステージ数]
   boss: null,               // ストーリーのボス
-  talk: null,               // ボスのセリフ {text, until}
 };
 const diffOf = () => (C && C.DIFFS[G.cfg[1]]) || { name: '普通', iframe: 1000 };
 const me = { x: 240, y: 240, invUntil: 0, needSnap: true, moving: false, lastSend: 0, cdEnd: 0, hp: 20, alive: false, sp: 0 };
@@ -77,7 +76,7 @@ socket.on('roster', (list) => {
 
 socket.on('round', () => {
   G.bullets.clear(); G.particles.length = 0; G.texts.length = 0;
-  G.boss = null; G.talk = null;
+  G.boss = null;
   me.needSnap = true; me.invUntil = 0;
   hide('result');
 });
@@ -86,10 +85,10 @@ socket.on('round', () => {
 socket.on('stage', (s) => {
   G.bullets.clear();
   me.needSnap = true; // 復活した人は初期位置へ
-  toast(`STAGE ${s.stage + 1}/${s.total}  ${s.name}`);
+  toast(`STAGE ${s.stage + 1}/${s.total}  ${s.name}`, '#ffd60a');
   sfx('stage');
 });
-socket.on('talk', (t) => { G.talk = { text: t.text, until: t.until, start: sNow() }; sfx('talk'); });
+socket.on('talk', (t) => { notify(t.text, '#fff', Math.max(1500, t.until - sNow())); sfx('talk'); });
 socket.on('bx', (ids) => {
   // ボスに命中したプレイヤー弾を消す
   for (const id of ids) {
@@ -125,7 +124,7 @@ socket.on('s', (s) => {
     if (id === myId) {
       me.hp = hp; me.alive = !!alive;
       me.cdEnd = sNow() + cd;
-      if (sp >= C.SP_MAX && me.sp < C.SP_MAX && G.st === 'play' && performance.now() - spPressed > 600) { sfx('spReady'); toast('必殺技ゲージMAX！ SPボタンで発動'); }
+      if (sp >= C.SP_MAX && me.sp < C.SP_MAX && G.st === 'play' && performance.now() - spPressed > 600) { sfx('spReady'); toast('必殺技ゲージMAX！ SPボタンで発動', '#bf5af2'); }
       me.sp = sp;
       if (me.needSnap || !alive || G.st !== 'play') { me.x = x; me.y = y; }
       if (G.st === 'play' && me.needSnap) me.needSnap = false;
@@ -146,22 +145,20 @@ socket.on('fx', (f) => {
   const col = colorOf(f.id);
   if (f.t === 'hit') {
     burst(f.x, f.y, col, 10, 120);
-    G.texts.push({ x: f.x, y: f.y - 14, text: 'HIT', color: '#ff453a', life: 0.8 });
     if (f.id !== myId) sfx('hitOther');
-    if (f.by === myId && f.id !== myId) { toast(`${nameOf(f.id)} に命中！`); sfx('confirm'); }
+    if (f.by === myId && f.id !== myId) { toast(`${nameOf(f.id)} に命中！`, '#ffd60a'); sfx('confirm'); }
   } else if (f.t === 'dead') {
     shatter(f.x, f.y, col);
     sfx('break');
-    if (f.id === myId) { toast(f.by ? `${nameOf(f.by)} にやられた…` : 'やられた…'); vibrate([60, 40, 120]); }
-    else if (f.by === myId) toast(`${nameOf(f.id)} を倒した！`);
-    else toast(`${nameOf(f.id)} が脱落`);
+    if (f.id === myId) { toast(f.by ? `${nameOf(f.by)} にやられた…` : 'やられた…', '#ff453a'); vibrate([60, 40, 120]); }
+    else if (f.by === myId) toast(`${nameOf(f.id)} を倒した！`, '#ffd60a');
+    else toast(`${nameOf(f.id)} が脱落`, '#aaa');
   } else if (f.t === 'fire') {
     ringFx(f.x, f.y, col);
     if (f.id === myId) sfx('shoot'); else sfx('shootOther');
   } else if (f.t === 'item') {
     burst(f.x, f.y, f.item === 'heal' ? '#32d74b' : '#ffd60a', 12, 90);
-    G.texts.push({ x: f.x, y: f.y - 12, text: f.item === 'heal' ? 'HP UP' : 'CHARGE!', color: f.item === 'heal' ? '#32d74b' : '#ffd60a', life: 1 });
-    if (f.id === myId) sfx('item');
+    if (f.id === myId) { sfx('item'); toast(f.item === 'heal' ? 'HP回復！' : 'SHOT チャージ完了！', f.item === 'heal' ? '#32d74b' : '#ffd60a', 1500); }
   } else if (f.t === 'special') {
     // 周囲の敵弾を消す（自分の弾は残す）
     const now = sNow();
@@ -171,13 +168,14 @@ socket.on('fx', (f) => {
       if (b.t >= 0 && Math.hypot(b.x - f.x, b.y - f.y) < f.r) { burst(b.x, b.y, '#fff', 2, 60); G.bullets.delete(bid); }
     }
     G.particles.push({ x: f.x, y: f.y, ring: true, big: f.r, life: 0.5, max: 0.5, color: col, size: 0 });
-    G.texts.push({ x: f.x, y: f.y - 24, text: 'SOUL BURST!', color: col, life: 1.2 });
+    toast(`${f.id === myId ? 'あなた' : nameOf(f.id)} のソウルバースト！`, col, 1800);
     shake = Math.max(shake, 8);
     if (f.id === myId) { me.invUntil = Math.max(me.invUntil, now + f.inv); vibrate([30, 30, 60]); }
     sfx('special');
   } else if (f.t === 'bossdown') {
     for (let i = 0; i < 4; i++) setTimeout(() => { burst(f.x + (Math.random() - 0.5) * 60, f.y + (Math.random() - 0.5) * 60, f.color, 24, 220); shake = 12; sfx('break'); }, i * 250);
-    G.texts.push({ x: C.W / 2, y: C.H / 2, text: 'STAGE CLEAR!', color: '#ffd60a', life: 2.5, big: true });
+    toast('STAGE CLEAR!', '#ffd60a', 3000);
+    G.texts.push({ x: f.x, y: f.y, text: 'STAGE CLEAR!', color: '#ffd60a', life: 2.5, big: true }); // ボスがいた場所（上側）に表示
     vibrate([80, 60, 80, 60, 160]);
     setTimeout(() => sfx('win'), 900);
   } else if (f.t === 'emote') {
@@ -194,7 +192,7 @@ function nameOf(id) { const r = G.roster.get(id); return r ? r.name : '???'; }
 function onStateChange(prev, st) {
   if (st === 'countdown') { hide('lobby'); hide('result'); }
   if (st === 'play') { sfx('go'); }
-  if (st === 'lobby') { hide('result'); show('lobby'); updateLobby(); G.bullets.clear(); G.boss = null; G.talk = null; }
+  if (st === 'lobby') { hide('result'); show('lobby'); updateLobby(); G.bullets.clear(); G.boss = null; }
   if (st !== 'lobby') hide('lobby');
 }
 
@@ -234,7 +232,7 @@ function join(info, isRejoin) {
     G.players.clear(); G.bullets.clear();
     $('roomChip').textContent = isPublic ? 'PUBLIC' : `ROOM ${roomId}`;
     $('btnShare').classList.toggle('hidden', isPublic);
-    hide('title'); show('hud'); show('plist'); show('emotes');
+    hide('title'); show('hud'); show('plist'); show('emotes'); show('feed');
     if (!isPublic) history.replaceState(null, '', `?room=${roomId}`);
     setStatus('');
     resize();
@@ -255,7 +253,7 @@ function leave() {
   roomId = null; joinInfo = null; myId = null; G.st = 'none';
   socket.disconnect(); socket.connect();
   history.replaceState(null, '', location.pathname);
-  hide('hud'); hide('plist'); hide('emotes'); hide('lobby'); hide('result'); $('conn').classList.add('hidden');
+  hide('hud'); hide('plist'); hide('emotes'); hide('feed'); hide('lobby'); hide('result'); $('feedList').innerHTML = ''; $('conn').classList.add('hidden');
   show('title'); loadTop();
 }
 $('btnLeave').onclick = () => { if (confirm('部屋から退出しますか？')) leave(); };
@@ -286,9 +284,19 @@ loadTop();
 function show(id) { $(id).classList.remove('hidden'); }
 function hide(id) { $(id).classList.add('hidden'); }
 let toastTimer = 0;
-function toast(t) {
+// ゲーム中の通知は、ステージ（バトルボックス）の外にある通知エリアへ。タイトル画面などでは従来のトースト
+function toast(t, color = '#fff', ms = 2600) {
+  if (roomId) return notify(t, color, ms);
   const el = $('toast'); el.textContent = t; el.classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+}
+const feedMax = () => (L.portrait ? 2 : 5) - ($('feedSticky').classList.contains('hidden') ? 0 : 1);
+function notify(text, color = '#fff', ms = 2600) {
+  const list = $('feedList'), el = document.createElement('div');
+  el.className = 'fi'; el.textContent = text; el.style.color = color;
+  list.appendChild(el);
+  while (list.children.length > Math.max(1, feedMax())) list.firstChild.remove();
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, ms);
 }
 
 const amHost = () => { const r = G.roster.get(myId); return !!(r && r.host); };
@@ -477,7 +485,7 @@ function pointerUp(id) {
     const inCenter = Math.hypot(aim.x - L.fire.x, aim.y - L.fire.y) <= AIM_TH;
     if (!aim.dragged) tryFire(autoAimAngle());
     else if (!inCenter) tryFire(aim.angle);
-    else toast('ショットをキャンセル');
+    else toast('ショットをキャンセル', '#aaa', 1200);
     aim.id = null;
   }
   if (id === stick.id) releaseStick();
@@ -652,11 +660,11 @@ function resize() {
   cv.width = Math.round(L.w * dpr); cv.height = Math.round(L.h * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   L.portrait = L.h > L.w * 1.1;
-  const top = 52, hpLine = 34;
-  const plist = $('plist'), em = $('emotes');
+  const top = 52, hpLine = 34, msgH = 44;
+  const plist = $('plist'), em = $('emotes'), feed = $('feed');
   if (L.portrait) {
     const ctrlH = clamp(L.h * 0.27, 150, 240);
-    const avail = L.h - top - hpLine - ctrlH - 8;
+    const avail = L.h - top - hpLine - msgH - ctrlH - 8;
     L.bs = Math.max(160, Math.min(L.w - 20, avail));
     L.bx = (L.w - L.bs) / 2; L.by = top + Math.max(0, (avail - L.bs) / 2);
     const cy = L.h - ctrlH / 2 - 4;
@@ -665,6 +673,7 @@ function resize() {
     L.stickHome = { x: 88, y: cy };
     plist.style.cssText = `left:${L.bx + 6}px;top:${L.by + 6}px;opacity:.75`;
     em.style.cssText = `left:50%;transform:translateX(-50%);bottom:calc(6px + env(safe-area-inset-bottom))`;
+    feed.style.cssText = `left:${L.bx}px;width:${L.bs}px;top:${L.by + L.bs + hpLine}px;height:${msgH}px;text-align:center`;
   } else {
     L.bs = Math.max(160, Math.min(L.h - top - hpLine - 10, L.w - 360));
     L.bx = (L.w - L.bs) / 2; L.by = top;
@@ -673,6 +682,7 @@ function resize() {
     L.stickHome = { x: 100, y: L.h - 110 };
     plist.style.cssText = `left:12px;top:${top + 6}px`;
     em.style.cssText = `right:12px;top:${top + 6}px`;
+    feed.style.cssText = `left:10px;width:${Math.max(120, L.bx - 20)}px;top:${top + 80}px;height:${Math.max(60, L.h - 110 - 56 - 10 - top - 80)}px;text-align:left`;
   }
   L.stickR = L.portrait ? 50 : 56;
   L.sc = C ? L.bs / C.W : 1;
@@ -895,7 +905,7 @@ function draw() {
   ctx.globalAlpha = 1;
   for (const t of G.texts) {
     ctx.globalAlpha = Math.min(1, t.life * 2);
-    ctx.fillStyle = t.color; ctx.font = `${t.big ? 40 : t.small ? 10 : 14}px DotGothic16, monospace`; ctx.textAlign = 'center';
+    ctx.fillStyle = t.color; ctx.font = `${t.big ? 32 : t.small ? 10 : 14}px DotGothic16, monospace`; ctx.textAlign = 'center';
     ctx.fillText(t.text, t.x, t.y);
   }
   ctx.globalAlpha = 1;
@@ -1014,6 +1024,141 @@ function drawBoss(b, pnow) {
       ctx.fillStyle = '#1c1c1e'; for (let i = -2; i <= 2; i++) ctx.fillRect(i * 9 - 3, R * 0.35, 6, R * 0.4);
       break;
     }
+    case 'ghost': {
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.fillStyle = c; ctx.beginPath();
+      ctx.arc(0, -4, R * 0.8, Math.PI, 0);
+      for (let i = 0; i <= 6; i++) { // すそのギザギザ（ゆらゆら）
+        const x = R * 0.8 - i * (R * 1.6 / 6), y = R * 0.7 + (i % 2 ? -7 : 0) + Math.sin(t * 5 + i) * 3;
+        ctx.lineTo(x, y);
+      }
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p2 ? '#ff453a' : '#000';
+      ctx.beginPath(); ctx.ellipse(-10, -6, 4, 7, 0, 0, Math.PI * 2); ctx.ellipse(10, -6, 4, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(0, 12, 5, 7, 0, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'frog': {
+      const hop = Math.abs(Math.sin(t * 3)) * 5;
+      ctx.translate(0, -hop);
+      ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 6, R, R * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-R * 0.5, -R * 0.45, 11, 0, Math.PI * 2); ctx.arc(R * 0.5, -R * 0.45, 11, 0, Math.PI * 2); ctx.fill();
+      eyes(R * 0.5, -R * 0.45, 7, '#fff');
+      eyes(R * 0.5, -R * 0.42, 4, p2 ? '#ff453a' : '#000');
+      ctx.strokeStyle = '#1c3d10'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 6, R * 0.55, 0.3, Math.PI - 0.3); ctx.stroke();
+      ctx.fillStyle = '#ff9eb5'; ctx.beginPath(); ctx.arc(-R * 0.6, 10, 5, 0, Math.PI * 2); ctx.arc(R * 0.6, 10, 5, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'spider': {
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -R); ctx.lineTo(0, -200); ctx.stroke(); // 糸
+      ctx.strokeStyle = c; ctx.lineWidth = 4;
+      for (let s = -1; s <= 1; s += 2) for (let i = 0; i < 4; i++) { // 脚
+        const a = (i - 1.5) * 0.45 + Math.sin(t * 6 + i) * 0.12;
+        ctx.beginPath(); ctx.moveTo(s * R * 0.4, 0);
+        ctx.lineTo(s * R * 1.1, Math.sin(a) * R * 0.9 - 8); ctx.lineTo(s * R * 1.45, Math.sin(a) * R * 1.2 + 12); ctx.stroke();
+      }
+      ctx.fillStyle = c; ctx.beginPath(); ctx.arc(0, 8, R * 0.62, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, -R * 0.35, R * 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = p2 ? '#ff453a' : '#ffd60a';
+      for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(-9 + i * 6, -R * 0.4 + (i % 2) * 3, 2.5, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#ff375f'; ctx.fillRect(-4, 2, 8, 14); ctx.fillRect(-9, 7, 18, 4); // 背中の模様
+      break;
+    }
+    case 'snowman': {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(0, R * 0.35, R * 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, -R * 0.55, R * 0.48, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff453a'; ctx.fillRect(-R * 0.5, -R * 0.2, R, 7); // マフラー
+      ctx.fillStyle = '#1c1c1e'; ctx.fillRect(-R * 0.4, -R * 1.2, R * 0.8, 6); ctx.fillRect(-R * 0.25, -R * 1.55, R * 0.5, R * 0.38); // 帽子
+      eyes(8, -R * 0.62, 3, p2 ? '#2aa7ff' : '#000');
+      ctx.fillStyle = '#ff9f0a'; ctx.beginPath(); ctx.moveTo(0, -R * 0.5); ctx.lineTo(14, -R * 0.44); ctx.lineTo(0, -R * 0.38); ctx.fill();
+      ctx.fillStyle = '#000'; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(0, R * 0.1 + i * 10, 2.5, 0, Math.PI * 2); ctx.fill(); }
+      break;
+    }
+    case 'dragon': {
+      const flap = Math.sin(t * 6) * 0.35;
+      ctx.fillStyle = '#8b1a1a';
+      for (const s of [-1, 1]) { // 翼
+        ctx.save(); ctx.scale(s, 1); ctx.rotate(-flap);
+        ctx.beginPath(); ctx.moveTo(R * 0.4, -4); ctx.lineTo(R * 1.6, -R * 0.9); ctx.lineTo(R * 1.3, -R * 0.1); ctx.lineTo(R * 1.5, R * 0.3); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 4, R * 0.75, R * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffd60a'; ctx.beginPath(); ctx.moveTo(-14, -R * 0.6); ctx.lineTo(-9, -R * 1.05); ctx.lineTo(-5, -R * 0.62); ctx.moveTo(14, -R * 0.6); ctx.lineTo(9, -R * 1.05); ctx.lineTo(5, -R * 0.62); ctx.fill(); // 角
+      ctx.fillStyle = '#ffe3a3'; ctx.beginPath(); ctx.ellipse(0, 12, R * 0.4, R * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+      eyes(11, -6, 4.5, '#fff'); eyes(11, -6, 2.5, p2 ? '#ff9f0a' : '#000');
+      break;
+    }
+    case 'mage': {
+      ctx.fillStyle = '#3a2d7a'; // ローブ
+      ctx.beginPath(); ctx.moveTo(-R * 0.8, R); ctx.lineTo(R * 0.8, R); ctx.lineTo(0, -R * 0.6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffd7b5'; ctx.beginPath(); ctx.arc(0, -R * 0.35, R * 0.38, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3a2d7a'; ctx.beginPath(); ctx.moveTo(-R * 0.55, -R * 0.55); ctx.lineTo(R * 0.55, -R * 0.55); ctx.lineTo(4, -R * 1.45); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#eee'; ctx.beginPath(); ctx.moveTo(-R * 0.3, -R * 0.2); ctx.lineTo(R * 0.3, -R * 0.2); ctx.lineTo(0, R * 0.45); ctx.closePath(); ctx.fill(); // ひげ
+      eyes(6, -R * 0.4, 2.5, '#000');
+      ctx.strokeStyle = '#a2845e'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(R * 0.8, R); ctx.lineTo(R * 0.95, -R * 0.7); ctx.stroke(); // 杖
+      ctx.fillStyle = c; ctx.globalAlpha = alpha * (0.6 + 0.4 * Math.sin(t * (p2 ? 20 : 8)));
+      ctx.beginPath(); ctx.arc(R * 0.95, -R * 0.8, 7, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = alpha;
+      break;
+    }
+    case 'mirror': {
+      const n = p2 ? 3 : 1;
+      for (let k = n - 1; k >= 0; k--) { // 第2形態は残像が増える
+        const ox = k ? Math.sin(t * 3 + k * 2) * 26 : 0;
+        ctx.globalAlpha = alpha * (k ? 0.3 : 1);
+        ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(ox, -R); ctx.lineTo(ox + R * 0.75, 0); ctx.lineTo(ox, R); ctx.lineTo(ox - R * 0.75, 0); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.moveTo(ox - 4, -R * 0.7); ctx.lineTo(ox + 10, -R * 0.2); ctx.lineTo(ox - 4, -R * 0.1); ctx.closePath(); ctx.fill();
+      }
+      ctx.globalAlpha = alpha;
+      eyes(9, 2, 4, '#0a3d62');
+      break;
+    }
+    case 'clown': {
+      for (let i = 0; i < 3; i++) { // ジャグリングの玉
+        const a = t * (p2 ? 5 : 3) + i * 2.1;
+        ctx.fillStyle = ['#ff453a', '#ffd60a', '#32d74b'][i];
+        ctx.beginPath(); ctx.arc(Math.cos(a) * R * 1.2, -R * 0.8 + Math.sin(a) * R * 0.5, 5, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, R * 0.78, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(-R * 0.75, -R * 0.35); ctx.lineTo(R * 0.75, -R * 0.35); ctx.lineTo(0, -R * 1.4); ctx.closePath(); ctx.fill(); // 帽子
+      ctx.fillStyle = '#ffd60a'; ctx.beginPath(); ctx.arc(0, -R * 1.4, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff453a'; ctx.beginPath(); ctx.arc(0, 4, 6, 0, Math.PI * 2); ctx.fill(); // 鼻
+      ctx.fillStyle = '#5856d6'; ctx.beginPath(); ctx.moveTo(-12, -14); ctx.lineTo(-8, -2); ctx.lineTo(-16, -2); ctx.fill(); ctx.beginPath(); ctx.moveTo(12, -14); ctx.lineTo(16, -2); ctx.lineTo(8, -2); ctx.fill();
+      ctx.strokeStyle = '#ff453a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 10, 12, 0.2, Math.PI - 0.2); ctx.stroke();
+      break;
+    }
+    case 'angel': {
+      const flap = Math.sin(t * 3) * 0.2;
+      for (const s of [-1, 1]) { // 翼（第2形態で黒く）
+        ctx.save(); ctx.scale(s, 1); ctx.rotate(flap);
+        ctx.fillStyle = p2 ? '#2c2c2e' : '#fff';
+        for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.ellipse(R * 0.9 + i * 8, -6 + i * 10, R * 0.75, 9, -0.4 + i * 0.3, 0, Math.PI * 2); ctx.fill(); }
+        ctx.restore();
+      }
+      ctx.strokeStyle = '#ffd60a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(0, -R * 1.05, 16, 5, 0, 0, Math.PI * 2); ctx.stroke(); // 輪
+      ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(-R * 0.6, R); ctx.lineTo(R * 0.6, R); ctx.lineTo(0, -R * 0.2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffe9d6'; ctx.beginPath(); ctx.arc(0, -R * 0.4, R * 0.42, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2; // 閉じた目
+      ctx.beginPath(); ctx.arc(-7, -R * 0.42, 4, 0, Math.PI); ctx.moveTo(11, -R * 0.42); ctx.arc(7, -R * 0.42, 4, 0, Math.PI); ctx.stroke();
+      break;
+    }
+    case 'void': {
+      for (let i = 0; i < 8; i++) { // 闇の触手
+        const a = i * Math.PI / 4 + t * 0.6;
+        ctx.strokeStyle = '#3a3a3c'; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(Math.cos(a) * R * 0.8, Math.sin(a) * R * 0.8);
+        ctx.quadraticCurveTo(Math.cos(a + 0.4) * R * 1.3, Math.sin(a + 0.4) * R * 1.3, Math.cos(a + Math.sin(t * 2 + i) * 0.4) * R * 1.55, Math.sin(a + Math.sin(t * 2 + i) * 0.4) * R * 1.55);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#1c1c1e'; ctx.beginPath(); ctx.arc(0, 0, R * 0.95, 0, Math.PI * 2); ctx.fill();
+      const open = 0.55 + 0.45 * Math.abs(Math.sin(t * 0.8)); // まばたき
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(0, 0, R * 0.75, R * 0.45 * open, 0, 0, Math.PI * 2); ctx.fill();
+      const lx = clamp((me.x - b.x) / 20, -10, 10), ly = clamp((me.y - b.y) / 30, -5, 5); // こちらを見る
+      ctx.fillStyle = p2 ? '#ff453a' : '#bf5af2'; ctx.beginPath(); ctx.arc(lx, ly * open, R * 0.3 * Math.min(1, open + 0.2), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(lx, ly * open, R * 0.13, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
     default: { // king
       heartPath(0, 4, R * 2.1); ctx.fillStyle = c; ctx.fill();
       ctx.fillStyle = '#ffd60a'; // 王冠
@@ -1045,15 +1190,6 @@ function drawStoryUI(now) {
     ctx.fillRect(60, 24, 360 * pct, 9);
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(60, 24, 360, 9);
     ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.moveTo(240, 22); ctx.lineTo(240, 35); ctx.stroke(); // 第2形態の境目
-  }
-  // セリフ（Undertale風の文字送り）
-  const tk = G.talk;
-  if (tk && now < tk.until) {
-    const shown = tk.text.slice(0, Math.floor((now - tk.start) / 35) + 1);
-    ctx.globalAlpha = 0.9; ctx.fillStyle = '#000'; ctx.fillRect(16, 156, 448, 44);
-    ctx.globalAlpha = 1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(16, 156, 448, 44);
-    ctx.fillStyle = '#fff'; ctx.font = '15px DotGothic16, monospace'; ctx.textAlign = 'left';
-    ctx.fillText(shown, 28, 178, 424);
   }
 }
 
@@ -1179,15 +1315,19 @@ function loop(t) {
     // ストーリーではボスのHPバーと重ならないよう、縦画面のプレイヤー一覧をボックスの下側へ
     if (L.portrait) $('plist').style.top = (G.md === 'story' && G.st !== 'lobby'
       ? L.by + L.bs - $('plist').offsetHeight - 8 : L.by + 6) + 'px';
-    // 観戦バナー（途中参加 or 脱落）
-    const r = G.roster.get(myId), banner = $('specBanner');
+    // 観戦中の表示（途中参加 or 脱落）は通知エリアの固定行に
+    const r = G.roster.get(myId), sticky = $('feedSticky');
     const watching = (G.st === 'play' || G.st === 'countdown') && !me.alive;
-    banner.classList.toggle('hidden', !watching);
-    if (watching) {
-      banner.textContent = r && r.spec ? '観戦中 — 次の試合から参戦します' : '脱落… 観戦中（次の試合を待とう）';
-      banner.style.top = (L.by + (G.md === 'story' ? 46 : 30)) + 'px';
+    sticky.classList.toggle('hidden', !watching);
+    if (watching) sticky.textContent = r && r.spec ? '観戦中 — 次の試合から参戦します'
+      : G.md === 'story' ? '脱落… 次のボスで復活します' : '脱落… 観戦中（次の試合を待とう）';
+    // 横画面：通知エリアはプレイヤー一覧のすぐ下
+    if (!L.portrait) {
+      const pl = $('plist'), ft = pl.offsetTop + pl.offsetHeight + 10;
+      $('feed').style.top = ft + 'px';
+      $('feed').style.height = Math.max(60, L.stickHome.y - L.stickR - 14 - ft) + 'px';
     }
-  } else if (!roomId) $('specBanner').classList.add('hidden');
+  }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

@@ -108,7 +108,11 @@
   .tag.ok { color: #32d74b; } .tag.wait { color: #777; } .tag.host { color: #ffd60a; } .tag.spec { color: #64d2ff; }
   #lobbyCode { font-size: 15px; color: #fff; margin: 0 0 8px; }
   #lobbyCode b { font-size: 22px; letter-spacing: 4px; color: #ffd60a; }
-  #specBanner { position: fixed; left: 50%; transform: translateX(-50%); z-index: 9; background: #000; border: 2px solid #64d2ff; color: #64d2ff; padding: 4px 12px; font-size: 13px; pointer-events: none; white-space: nowrap; }
+  #feed { position: fixed; z-index: 9; pointer-events: none; font-size: 13px; line-height: 20px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+  #feedList { display: flex; flex-direction: column; justify-content: flex-end; }
+  #feed .fi, #feedSticky { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .3s; }
+  #feed .fi.out { opacity: 0; }
+  #feedSticky { color: #64d2ff; }
   #toast { position: fixed; left: 50%; top: 60px; transform: translateX(-50%); z-index: 30; background: #000; border: 2px solid #fff; padding: 8px 14px; font-size: 14px; pointer-events: none; transition: opacity .3s; opacity: 0; }
   #toast.show { opacity: 1; }
   #conn { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; font-size: 18px; text-align: center; padding: 20px; }
@@ -155,7 +159,7 @@
       <li>時間がたつほど弾幕が激しくなる。1人ならソロで生存記録に挑戦！</li>
       <li>対戦（2人以上）は<b>バトロワ</b>。40秒たつと<b>エリアが縮小</b>していく！</li>
       <li>試合中の部屋に参加すると<b>観戦</b>し、次の試合から参戦できます</li>
-      <li><b style="color:#bf5af2">ストーリー</b>＝5体のボスを順番に倒す協力モード。ボスに弾を当ててHPを削ろう。1人でも、友達と一緒でもOK。やられても次のボスで復活、全滅したらそのボスから再挑戦</li>
+      <li><b style="color:#bf5af2">ストーリー</b>＝5ステージのボスを順番に倒す協力モード。各ステージのボスは3体の中からランダムで登場！ボスに弾を当ててHPを削ろう。1人でも、友達と一緒でもOK。やられても次のボスで復活、全滅したらそのボスから再挑戦</li>
       <li>ロビーでホストが<b>難易度</b>を選べます：<span style="color:#32d74b">簡単</span>／普通／<span style="color:#ff9f0a">難しい</span>／<span style="color:#ff453a">鬼</span>／<span style="color:#bf5af2">神</span></li>
     </ul>
   </div>
@@ -216,7 +220,8 @@
   </div>
 </div>
 
-<div id="specBanner" class="hidden">観戦中 — 次の試合から参戦します</div>
+<!-- ゲーム中の通知エリア（ステージの外） -->
+<div id="feed" class="hidden"><div id="feedSticky" class="hidden"></div><div id="feedList"></div></div>
 <div id="toast"></div>
 <div id="conn" class="hidden">接続が切れました<br>再接続中…</div>
 
