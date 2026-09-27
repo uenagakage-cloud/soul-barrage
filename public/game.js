@@ -172,6 +172,14 @@ socket.on('fx', (f) => {
     shake = Math.max(shake, 8);
     if (f.id === myId) { me.invUntil = Math.max(me.invUntil, now + f.inv); vibrate([30, 30, 60]); }
     sfx('special');
+  } else if (f.t === 'rage') {
+    // 最終ステージのボスが「最後のあがき」に入った
+    burst(f.x, f.y, f.color, 30, 260);
+    G.particles.push({ x: f.x, y: f.y, ring: true, big: 160, life: 0.7, max: 0.7, color: '#ff453a', size: 0 });
+    shake = 14; flash = 0.35;
+    vibrate([100, 50, 100]);
+    toast('⚠ ボスが最後のあがきを始めた！', '#ff453a', 2500);
+    sfx('break');
   } else if (f.t === 'bossdown') {
     for (let i = 0; i < 4; i++) setTimeout(() => { burst(f.x + (Math.random() - 0.5) * 60, f.y + (Math.random() - 0.5) * 60, f.color, 24, 220); shake = 12; sfx('break'); }, i * 250);
     toast('STAGE CLEAR!', '#ffd60a', 3000);

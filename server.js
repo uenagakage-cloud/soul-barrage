@@ -493,9 +493,10 @@ class Room {
   startStage(now) {
     const def = pick(BOSSES[this.storyStage]); // 候補5体からランダム
     const n = Math.max(1, [...this.players.values()].length);
-    const hp = Math.round(def.hp * this.dp.bossHp * (0.6 + 0.4 * n)); // 人数が多いほどボスも硬い
+    const lastStage = this.storyStage === BOSSES.length - 1;
+    const hp = Math.round(def.hp * this.dp.bossHp * (0.6 + 0.4 * n) * (lastStage ? 1.25 : 1)); // 人数が多いほどボスも硬い。最終ステージはさらに1.25倍
     this.lastBossName = def.name;
-    this.boss = { def, hp, max: hp, t0: now, phase: 1, x: W / 2, y: def.move.y, flashUntil: 0, deadAt: 0, stageStart: now };
+    this.boss = { def, hp, max: hp, last: lastStage, rage: false, nextPress: now + 4000, t0: now, phase: 1, x: W / 2, y: def.move.y, flashUntil: 0, deadAt: 0, stageStart: now };
     // 脱落者・途中参加者も復活し、全員全回復して次のボスへ
     const list = [...this.players.values()];
     list.forEach((p, i) => {
@@ -504,6 +505,7 @@ class Room {
     });
     this.pshots = [];
     this.nextPattern = now + 3200; // 登場セリフの間は攻撃しない
+    this.nextPatternStart = this.nextPattern;
     this.talk(def.intro[0], 1600, now);
     setTimeout(() => { if (this.boss && this.boss.def === def && !this.boss.deadAt) this.talk(def.intro[1], 1800, Date.now()); }, 1600);
     this.emit('stage', { stage: this.storyStage, total: BOSSES.length, name: def.name });
@@ -514,7 +516,7 @@ class Room {
 
   bossPos(now) {
     const m = this.boss.def.move, t = (now - this.boss.t0) / 1000;
-    const k = this.boss.phase === 2 ? 1.4 : 1;
+    const k = (this.boss.phase === 2 ? 1.4 : 1) * (this.boss.last ? 1.3 : 1) * (this.boss.rage ? 1.2 : 1); // 最終ステージ・最後のあがきは速い
     const x = W / 2 + Math.sin(t * m.fx * k) * m.ax, y = m.y + Math.sin(t * m.fy * k) * m.ay;
     if (!this.dp.roam) return { x, y };
     // 難易度「神」：8の字（リサージュ曲線）でフィールド全体を動き回る。
@@ -560,6 +562,23 @@ class Room {
     if (b.phase === 1 && b.hp <= b.max / 2) {
       b.phase = 2;
       this.talk(b.def.phase2, 2000, now);
+    }
+    if (b.last && !b.rage && b.hp > 0 && b.hp <= b.max / 4) {
+      // 最終ステージ：HP25%以下で「最後のあがき」。攻撃がさらに重なり、動きも速くなる
+      b.rage = true;
+      this.talk(`* ${b.def.name}は さいごの ちからを ふりしぼった！`, 2200, now);
+      this.emit('fx', { t: 'rage', x: b.x, y: b.y, color: b.def.color });
+    }
+    if (b.last && !b.deadAt && now >= b.nextPress && now >= this.nextPatternStart) {
+      // 最終ステージ：攻撃の合間も、フィールドの端から自機狙い弾が飛んでくる
+      b.nextPress = now + (b.rage ? 900 : b.phase === 2 ? 1300 : 1800);
+      const targets = this.alivePlayers();
+      if (targets.length) {
+        const tgt = pick(targets), side = Math.floor(Math.random() * 4);
+        const [x, y] = [[rand(0, W), -10], [rand(0, W), H + 10], [-10, rand(0, H)], [W + 10, rand(0, H)]][side];
+        const a = Math.atan2(tgt.y - y, tgt.x - x), v = 170 * this.dp.speed;
+        this.spawn([0, 1].map(i => ({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 6, t0: now + 450 + i * 140, warn: i === 0 })));
+      }
     }
     if (b.hp <= 0) {
       b.hp = 0; b.deadAt = now;
@@ -622,14 +641,17 @@ class Room {
       if (!b || b.deadAt) { this.nextPattern = now + 500; return; }
       const p2 = b.phase === 2;
       const last = this.storyStage === BOSSES.length - 1; // ステージ5（最終ステージ）
-      d = 1.3 + this.storyStage * 0.3 + (p2 ? 0.5 : 0) + (last ? 0.7 : 0);
+      d = 1.3 + this.storyStage * 0.3 + (p2 ? 0.5 : 0) + (last ? 1.2 : 0) + (b.rage ? 0.5 : 0);
       pool = p2 ? [...b.def.patterns, ...b.def.p2] : b.def.patterns;
-      gap = Math.max(last ? 250 : 350, (1500 - this.storyStage * 100 - (p2 ? 250 : 0)) * (last ? 0.7 : 1));
-      // 最終ステージは別の攻撃を同時に重ねてくる（通常30%、第2形態50%）
-      if (last && Math.random() < (p2 ? 0.5 : 0.3)) {
-        const other = pool[Math.floor(Math.random() * pool.length)][0];
+      gap = Math.max(last ? 200 : 350, (1500 - this.storyStage * 100 - (p2 ? 250 : 0)) * (last ? (b.rage ? 0.4 : 0.5) : 1));
+      // 最終ステージは別の攻撃を同時に重ねてくる（通常60%、第2形態90%、最後のあがきは必ず2つ＋50%で3つ目）
+      if (last) {
+        const layers = (b.rage || Math.random() < (p2 ? 0.9 : 0.6) ? 1 : 0) + (b.rage && Math.random() < 0.5 ? 1 : 0);
         const sp2 = Math.min(1.9, 0.85 + d * 0.12) * this.dp.speed;
-        setTimeout(() => { if (this.boss === b && !b.deadAt && this.state === 'play') PATTERNS[other](this, Date.now(), d, sp2); }, 250);
+        for (let L = 0; L < layers; L++) {
+          const other = pool[Math.floor(Math.random() * pool.length)][0];
+          setTimeout(() => { if (this.boss === b && !b.deadAt && this.state === 'play') PATTERNS[other](this, Date.now(), d, sp2); }, 250 + L * 350);
+        }
       }
     } else {
       const el = (now - this.roundStart) / 1000;
