@@ -138,7 +138,7 @@ socket.on('s', (s) => {
 
 socket.on('b', (list) => {
   for (const a of list) {
-    G.bullets.set(a[0], { id: a[0], x0: a[1], y0: a[2], vx: a[3], vy: a[4], ax: a[5], ay: a[6], r: a[7], t0: a[8], life: a[9], kind: a[10], owner: a[11], warn: a[12], x: a[1], y: a[2], grazed: false });
+    G.bullets.set(a[0], { id: a[0], x0: a[1], y0: a[2], vx: a[3], vy: a[4], ax: a[5], ay: a[6], r: a[7], t0: a[8], life: a[9], kind: a[10], owner: a[11], warn: a[12], col: a[13] || null, x: a[1], y: a[2], grazed: false });
   }
 });
 
@@ -1026,9 +1026,12 @@ function draw() {
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.45, 0, Math.PI * 2); ctx.fill();
     } else {
-      ctx.fillStyle = BCOL[b.kind] || '#fff';
+      // ボス専用技の弾はボスの色（青・オレンジは意味があるので色を変えない）
+      const special = b.col && b.kind !== K.BLUE && b.kind !== K.ORANGE;
+      ctx.fillStyle = special ? b.col : (BCOL[b.kind] || '#fff');
       ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
-      if (b.kind === K.BIG) { ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.35, 0, Math.PI * 2); ctx.fill(); }
+      if (special) { ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.35, 0, Math.PI * 2); ctx.fill(); }
+      else if (b.kind === K.BIG) { ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.35, 0, Math.PI * 2); ctx.fill(); }
     }
   }
 

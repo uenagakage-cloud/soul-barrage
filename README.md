@@ -38,6 +38,7 @@ Add new bullet patterns to the `PATTERNS` object.
 
 - **Battle**: solo survival (1 player) / battle royale (2+ players)
 - **Story (co-op)**: defeat 5 stages of bosses in order. Each stage picks 1 of 5 bosses at random (25 total). Works solo or with friends. Knocked-out players revive at the next boss. If everyone goes down, you retry from that boss.
+- Each boss has its own **signature attack** (drawn in the boss color) as its main move.
 - **Difficulty**: easy / normal / hard / oni / god (the host chooses in the lobby). On god, bosses roam the whole field.
 - Stages 4 and 5 get extra layers of difficulty (the `STAGE_BOOST` table in `server.js`). Stage 5 is by far the hardest: attacks are stronger with shorter gaps, 60–90% of them get a second attack layered on, and aimed shots keep coming from the edges. At 25% HP the boss enters a "last stand" phase with even more layering.
 
