@@ -326,15 +326,20 @@ const BOSSES = [
 // rage: HP25%以下で「最後のあがき」（必ず2つ重ね＋50%で3つ目、さらに速く）
 // heal: 回復アイテムの出現量の倍率（1.5 = 1.5倍、2 = 2倍）
 const STAGE_BOOST = [
-  null, null, null,
+  null,
+  // STAGE 2・3：鬼・神のときだけ強化（onlyOni）。ステージ4を基準に、なだらかに難しくなるよう調整
+  /*S2*/{ onlyOni: true, d: 0.9, gap: 0.65, layer: [0.3, 0.5], hp: 1.15, move: 1.15, press: [2800, 2100], rage: false, heal: 1 },
+  /*S3*/{ onlyOni: true, d: 1.6, gap: 0.47, layer: [0.6, 0.8], hp: 1.33, move: 1.28, press: [2100, 1500], rage: false, heal: 1.2 },
   { d: 0.6, gap: 0.6, layer: [0.45, 0.7], hp: 1.1, move: 1.15, press: [2300, 1700], rage: false, heal: 1.5, // STAGE 4
     oni: { d: 0.5, gap: 0.8, layer: [0.6, 0.85], press: 0.75, hp: 1.15 } }, // 鬼・神だけの上乗せ（AIテストプレイで公平化の前と同じ強さ＝クリア率3%前後に調整）
-  { d: 1.2, gap: 0.42, layer: [0.8, 1.0], hp: 1.25, move: 1.3, press: [1500, 900], rage: true, heal: 2 }, // STAGE 5
+  { d: 1.2, gap: 0.42, layer: [0.8, 1.0], hp: 1.25, move: 1.3, press: [1500, 900], rage: true, heal: 2, // STAGE 5
+    /*S5oni*/oni: { d: 0.4, gap: 0.85, layer: [0.9, 1.0], press: 0.8, hp: 1.15 } }, // 鬼・神だけの上乗せ（公平化の前の強さに戻す）
 ];
 // 鬼・神（難易度3以上）では oni の値を上乗せする：d は足し算、gap・press・hp は掛け算、layer は置き換え
 function stageBoost(stage, diff) {
   const b = STAGE_BOOST[stage];
   if (!b) return null;
+  if (b.onlyOni) return diff >= 3 ? b : null; // ステージ2・3は鬼・神だけ
   if (diff < 3 || !b.oni) return b;
   const o = b.oni;
   return { ...b, d: b.d + (o.d || 0), gap: b.gap * (o.gap || 1), layer: o.layer || b.layer,
