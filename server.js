@@ -21,7 +21,7 @@ const DIFFS = [
   { name: '普通', speed: 1.0, dens: 1.0, gap: 1.0, dmg: 3, bossHp: 1.0, iframe: 1000, item: 1.0 },
   { name: '難しい', speed: 1.15, dens: 1.3, gap: 0.85, dmg: 4, bossHp: 1.3, iframe: 1000, item: 1.2 },
   { name: '鬼', speed: 1.3, dens: 1.6, gap: 0.7, dmg: 5, bossHp: 1.6, iframe: 850, item: 1.5 },
-  { name: '神', speed: 1.5, dens: 2.0, gap: 0.55, dmg: 6, bossHp: 2.0, iframe: 700, item: 2.0, roam: true }, // roam: ボスがフィールド全体を動き回る
+  /*GOD*/{ name: '神', speed: 1.5, dens: 2.0, gap: 0.55, dmg: 5, bossHp: 2.0, iframe: 850, item: 2.0, roam: true }, // roam: ボスがフィールド全体を動き回る
 ];
 
 // ===== ゲーム定数（クライアントにも送る） =====
@@ -341,15 +341,30 @@ const STAGE_BOOST = [
   { d: 1.2, gap: 0.42, layer: [0.8, 1.0], hp: 1.25, move: 1.3, press: [1500, 900], rage: true, heal: 2, // STAGE 5
     /*S5oni*/oni: { d: 1.0, gap: 0.75, layer: [1.0, 1.0], press: 0.65, hp: 1.3 } }, // 鬼・神だけの上乗せ
 ];
+// ===== 神だけの調整（全ステージが「ギリギリ攻略可能」になるよう、AIテストプレイで調整） =====
+// 鬼の強化のあとに掛ける：d は足し算、gap・hp・move は掛け算、layer・press は置き換え（press: null で端からの狙い撃ちなし）
+const GOD_ADJ = [
+  /*G1*/{ d: 0.65, gap: 0.78, layer: [0.25, 0.45], hp: 1.2, move: 1, press: [3200, 2400] },
+  /*G2*/{ d: -0.1, gap: 1.03, layer: [0.33, 0.52], hp: 0.92, move: 1.0, press: [3300, 2500] },
+  /*G3*/{ d: -0.15, gap: 1.05, layer: [0.55, 0.75], hp: 0.95, move: 1.0, press: [2700, 1900] },
+  /*G4*/{ d: -0.25, gap: 1.02, layer: [0.6, 0.85], hp: 0.88, move: 1.0, press: [2500, 1800] },
+  /*G5*/{ d: -1.0, gap: 1.4, layer: [0.45, 0.65], hp: 0.55, move: 0.85, press: [2700, 1900] },
+];
+const NEUTRAL_BOOST = { d: 0, gap: 1, layer: [0, 0], hp: 1, move: 1, press: null, rage: false, heal: 1 };
 // 鬼・神（難易度3以上）では oni の値を上乗せする：d は足し算、gap・press・hp は掛け算、layer は置き換え
 function stageBoost(stage, diff) {
-  const b = STAGE_BOOST[stage];
-  if (!b) return null;
-  if (b.onlyOni) return diff >= 3 ? b : null; // ステージ2・3は鬼・神だけ
-  if (diff < 3 || !b.oni) return b;
-  const o = b.oni;
-  return { ...b, d: b.d + (o.d || 0), gap: b.gap * (o.gap || 1), layer: o.layer || b.layer,
-    press: b.press.map(v => v * (o.press || 1)), hp: b.hp * (o.hp || 1) };
+  let b = STAGE_BOOST[stage];
+  if (b && b.onlyOni && diff < 3) b = null; // ステージ2・3の強化は鬼・神だけ
+  if (b && diff >= 3 && b.oni) {
+    const o = b.oni;
+    b = { ...b, d: b.d + (o.d || 0), gap: b.gap * (o.gap || 1), layer: o.layer || b.layer,
+      press: b.press ? b.press.map(v => v * (o.press || 1)) : null, hp: b.hp * (o.hp || 1) };
+  }
+  const g = diff >= 4 ? GOD_ADJ[stage] : null;
+  if (!g) return b;
+  const base = b || NEUTRAL_BOOST;
+  return { ...base, d: base.d + g.d, gap: base.gap * g.gap, layer: g.layer, hp: base.hp * g.hp, move: base.move * g.move,
+    press: g.press === undefined ? base.press : g.press };
 }
 
 let highScores = []; // ソロ生存時間のトップ10（メモリ保持。サーバー再起動でリセット）
@@ -616,7 +631,7 @@ class Room {
         this.spawn([-0.18, 0, 0.18].map((da, i) => ({ x: at.x, y: at.y, vx: Math.cos(a + da) * v, vy: Math.sin(a + da) * v, r: 6, t0: now + 400, warn: i === 1 })));
       }
     }
-    if (bo && !b.deadAt && now >= b.nextPress && now >= this.nextPatternStart && now >= (this.strictUntil || 0)) {
+    if (bo && bo.press && !b.deadAt && now >= b.nextPress && now >= this.nextPatternStart && now >= (this.strictUntil || 0)) {
       // 後半ステージ：攻撃の合間も、フィールドの端から自機狙い弾が飛んでくる
       b.nextPress = now + (b.rage ? 900 : bo.press[b.phase === 2 ? 1 : 0]);
       const targets = this.alivePlayers();
