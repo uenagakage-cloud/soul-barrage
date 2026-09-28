@@ -85,7 +85,7 @@
   #plist.row .pr.me { border-color: #fff; }
   /* ボスのHP（フィールドの外） */
   #bossBar { position: fixed; z-index: 9; pointer-events: none; font-size: 12px; }
-  #bossBar .bbTop { display: flex; justify-content: space-between; gap: 6px; white-space: nowrap; overflow: hidden; }
+  #bossBar .bbTop { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 6px; line-height: 15px; } /* 狭いときは2行に折り返す */
   #bossBar #bbDiff { color: #aaa; }
   #bossBar .bbBar { position: relative; height: 9px; background: #400; border: 1px solid #fff; margin-top: 2px; }
   #bossBar .bbBar i { position: absolute; left: 0; top: 0; bottom: 0; background: #32d74b; transition: width .12s; }
@@ -123,9 +123,12 @@
   .tag.ok { color: #32d74b; } .tag.wait { color: #777; } .tag.host { color: #ffd60a; } .tag.spec { color: #64d2ff; }
   #lobbyCode { font-size: 15px; color: #fff; margin: 0 0 8px; }
   #lobbyCode b { font-size: 22px; letter-spacing: 4px; color: #ffd60a; }
-  #feed { position: fixed; z-index: 9; pointer-events: none; font-size: 13px; line-height: 20px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
-  #feedList { display: flex; flex-direction: column; justify-content: flex-end; }
-  #feed .fi, #feedSticky { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .3s; }
+  #feed { position: fixed; z-index: 9; pointer-events: none; font-size: 12.5px; line-height: 17px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+  #feedList { display: flex; flex-direction: column; justify-content: flex-end; min-height: 0; }
+  /* 長い文は「…」で切らずに折り返す */
+  #feed .fi, #feedSticky { white-space: normal; overflow-wrap: anywhere; line-break: strict; transition: opacity .3s; flex-shrink: 0; }
+  #feed .fi.talk { color: #fff; }
+  #feed .fi.small { font-size: 11px; line-height: 14px; }
   #feed .fi.out { opacity: 0; }
   #feedSticky { color: #64d2ff; }
   #ctrlEdit { position: fixed; left: 0; right: 0; top: 54px; z-index: 26; display: flex; justify-content: center; pointer-events: none; padding: 0 10px; }

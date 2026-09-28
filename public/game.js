@@ -88,7 +88,8 @@ socket.on('stage', (s) => {
   toast(`STAGE ${s.stage + 1}/${s.total}  ${s.name}`, '#ffd60a');
   sfx('stage');
 });
-socket.on('talk', (t) => { notify(t.text, '#fff', Math.max(1500, t.until - sNow())); sfx('talk'); });
+// ボスのセリフ：長い文ほど長く表示（1.5秒＋1文字あたり0.1秒）
+socket.on('talk', (t) => { notify(t.text, '#fff', Math.max(t.until - sNow(), 1500 + [...t.text].length * 100), true); sfx('talk'); });
 socket.on('bx', (ids) => {
   // ボスに命中したプレイヤー弾を消す
   for (const id of ids) {
@@ -183,7 +184,8 @@ socket.on('fx', (f) => {
   } else if (f.t === 'bossdown') {
     for (let i = 0; i < 4; i++) setTimeout(() => { burst(f.x + (Math.random() - 0.5) * 60, f.y + (Math.random() - 0.5) * 60, f.color, 24, 220); shake = 12; sfx('break'); }, i * 250);
     toast('STAGE CLEAR!', '#ffd60a', 3000);
-    G.texts.push({ x: f.x, y: f.y, text: 'STAGE CLEAR!', color: '#ffd60a', life: 2.5, big: true }); // ボスがいた場所（上側）に表示
+    // ボスがいた場所に表示（フィールドの端ではみ出さないよう内側に寄せる）
+    G.texts.push({ x: clamp(f.x, 120, C.W - 120), y: clamp(f.y, 50, C.H - 30), text: 'STAGE CLEAR!', color: '#ffd60a', life: 2.5, big: true });
     vibrate([80, 60, 80, 60, 160]);
     setTimeout(() => sfx('win'), 900);
   } else if (f.t === 'emote') {
@@ -298,12 +300,24 @@ function toast(t, color = '#fff', ms = 2600) {
   const el = $('toast'); el.textContent = t; el.classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
 }
-const feedMax = () => (L.portrait ? 2 : 5) - ($('feedSticky').classList.contains('hidden') ? 0 : 1);
-function notify(text, color = '#fff', ms = 2600) {
+// 通知エリアに収まるよう古いものから消す。ボスのセリフ（talk）は最後まで残す
+function fitFeed() {
+  const feed = $('feed'), list = $('feedList'), sticky = $('feedSticky');
+  const room = feed.clientHeight - (sticky.classList.contains('hidden') ? 0 : sticky.offsetHeight);
+  const over = () => list.scrollHeight > room + 1;
+  while (over() && list.children.length > 1) {
+    const victim = [...list.children].find(e => !e.classList.contains('talk')) || list.firstElementChild;
+    victim.remove();
+  }
+  // 1つだけでも入りきらないときは文字を少し小さく
+  const last = list.lastElementChild;
+  if (last && over()) last.classList.add('small');
+}
+function notify(text, color = '#fff', ms = 2600, talk = false) {
   const list = $('feedList'), el = document.createElement('div');
-  el.className = 'fi'; el.textContent = text; el.style.color = color;
+  el.className = 'fi' + (talk ? ' talk' : ''); el.textContent = text; el.style.color = color;
   list.appendChild(el);
-  while (list.children.length > Math.max(1, feedMax())) list.firstChild.remove();
+  fitFeed();
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, ms);
 }
 
@@ -737,7 +751,7 @@ function resize() {
   cv.width = Math.round(L.w * dpr); cv.height = Math.round(L.h * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   L.portrait = L.h > L.w * 1.1;
-  const top = 52, hpLine = 34, msgH = 44;
+  const top = 52, hpLine = 34, msgH = 54; // 通知エリアは3行ぶん
   const plist = $('plist'), em = $('emotes'), feed = $('feed'), bossBar = $('bossBar');
   L.storyUI = G.md === 'story' && (G.st === 'countdown' || G.st === 'play');
   if (L.portrait) {
