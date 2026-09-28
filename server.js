@@ -134,8 +134,8 @@ const BOSSES = [
       intro: ['* ホネナイトが カタカタと たちはだかる！', '* 「青い骨は うごくな。オレンジは とまるな。わかったか？」'],
       phase2: '* ホネナイトの めが あやしく ひかった！',
       defeat: '* ホネナイトは ほねを おって たおれた…',
-      patterns: [['bossBones', 3], ['sweep', 2], ['blueorange', 2]],
-      p2: [['bossAim', 2], ['cross', 2]],
+      patterns: [['bossBones', 3], ['bossBoomerang', 2], ['blueorange', 1], ['sweep', 1], ['bossAim', 1]],
+      p2: [['bossAim', 2], ['cross', 1], ['bossRing', 1], ['bossSlash', 1]],
     },
     {
       key: 'spider', name: 'クモの女王アラク', color: '#af52de', hp: 330, r: 30,
@@ -152,8 +152,8 @@ const BOSSES = [
       intro: ['* ユキダルマンが ころころと ころがってきた！', '* 「さむいのは すきかい？ ぼくは だいすき！」'],
       phase2: '* ふぶきが つよく なってきた！',
       defeat: '* ユキダルマンは とけて みずたまりに なった…',
-      patterns: [['bossSnow', 3], ['blueorange', 2], ['bossRing', 2]],
-      p2: [['sweep', 2], ['bossBones', 2]],
+      patterns: [['bossSnow', 3], ['blueorange', 1], ['bossRing', 2], ['bossBoomerang', 1]],
+      p2: [['sweep', 1], ['bossBones', 2], ['bossRing', 1]],
     },
     {
       key: 'golem', name: '岩の巨人ガンセキ', color: '#a0826d', hp: 360, r: 36,
@@ -161,8 +161,8 @@ const BOSSES = [
       intro: ['* ガンセキが ずしんと たちあがった！', '* 「……オレ、カタイ。オマエ、ツブス」'],
       phase2: '* ガンセキの からだに ひびが はいった… おこっている！',
       defeat: '* ガンセキは くずれて ただの いしに なった…',
-      patterns: [['bossQuake', 3], ['sweep', 2], ['bossBones', 2]],
-      p2: [['cross', 2], ['bossRing', 2]],
+      patterns: [['bossQuake', 3], ['sweep', 1], ['bossBones', 2], ['bossRing', 1], ['bossDrip', 1]],
+      p2: [['cross', 1], ['bossRing', 2], ['rain', 1]],
     },
     {
       key: 'jelly', name: 'クラゲのゆらら', color: '#ff9ff3', hp: 330, r: 32,
@@ -170,7 +170,7 @@ const BOSSES = [
       intro: ['* ゆららが ゆらゆらと ただよってきた…', '* 「しびれるの… きもちいいよ…？」'],
       phase2: '* ゆららの しょくしゅが でんきを おびた！',
       defeat: '* ゆららは うみの そこへ しずんでいった…',
-      patterns: [['bossDrip', 2], ['bossBoomerang', 2], ['blueorange', 2]],
+      patterns: [['bossDrip', 2], ['bossBoomerang', 2], ['blueorange', 1], ['ring', 1]],
       p2: [['bossSpiral', 2], ['bossThunder', 2]],
     },
   ],
@@ -209,8 +209,8 @@ const BOSSES = [
       intro: ['* 亡霊武者カゲマルが しずかに かたなを ぬいた…', '* 「……いざ、じんじょうに しょうぶ」'],
       phase2: '* カゲマルの かたなが あかく もえあがる！',
       defeat: '* カゲマルは 「みごと…」と つぶやき きえた…',
-      patterns: [['bossSlash', 3], ['bossAim', 2], ['sweep', 2]],
-      p2: [['bossLaser', 2], ['cross', 2]],
+      patterns: [['bossSlash', 3], ['bossAim', 2], ['sweep', 1], ['bossRing', 1]],
+      p2: [['bossLaser', 2], ['cross', 1], ['bossSpiral', 1]],
     },
     {
       key: 'kraken', name: '深海のクラーケン', color: '#1abc9c', hp: 440, r: 36,
@@ -230,8 +230,8 @@ const BOSSES = [
       intro: ['* きかいにんぎょう ギアロイドが きどうした！', '* 「ハイジョ… ハイジョ… ハイジョ…」'],
       phase2: '* ギアロイドは オーバーヒート している！',
       defeat: '* ギアロイドは ばくはつして ていしした…',
-      patterns: [['bossLaser', 3], ['aimed', 2], ['sweep', 2]],
-      p2: [['bossSpiral', 2], ['cross', 2]],
+      patterns: [['bossLaser', 3], ['aimed', 2], ['sweep', 1], ['bossRing', 1]],
+      p2: [['bossSpiral', 2], ['cross', 1], ['bossThunder', 1]],
     },
     {
       key: 'mirror', name: '鏡の精ミラージュ', color: '#5ac8fa', hp: 490, r: 32,
@@ -248,8 +248,8 @@ const BOSSES = [
       intro: ['* 道化師ピエロットが おじぎを した！', '* 「さあさあ ショーの はじまりだよ〜！」'],
       phase2: '* ピエロットは ジャグリングを はやめた！',
       defeat: '* ピエロットは はくしゅの なか きえていった…',
-      patterns: [['bossDrip', 2], ['blueorange', 2], ['bossBones', 2], ['bossWeb', 1]],
-      p2: [['bossThunder', 2], ['fountain', 2]],
+      patterns: [['bossDrip', 2], ['blueorange', 1], ['bossBones', 2], ['bossWeb', 2], ['bossBoomerang', 1]],
+      p2: [['bossThunder', 2], ['fountain', 1], ['bossBoomerang', 1]],
     },
     {
       key: 'ufo', name: '宇宙船ゼータ', color: '#7bed9f', hp: 500, r: 34,
@@ -266,8 +266,8 @@ const BOSSES = [
       intro: ['* にんぎょうし マリオネが いとを たらした…', '* 「あなたも わたしの おにんぎょうに なりなさい」'],
       phase2: '* マリオネの いとが ぜんぶ ほどけた！',
       defeat: '* マリオネは いとが きれて くずれおちた…',
-      patterns: [['bossWeb', 2], ['bossBones', 2], ['blueorange', 2]],
-      p2: [['bossBoomerang', 2], ['cross', 2]],
+      patterns: [['bossWeb', 3], ['bossBones', 2], ['blueorange', 1], ['bossAim', 1], ['bossBoomerang', 1]],
+      p2: [['bossBoomerang', 2], ['cross', 1], ['bossSpiral', 1], ['bossWeb', 1]],
     },
   ],
   // ---- STAGE 5 ----
@@ -279,7 +279,7 @@ const BOSSES = [
       phase2: '* ソウルキングは ほんきを だした！',
       defeat: '* ソウルキングは ひかりに なって きえた… きみたちの かちだ！',
       patterns: [['bossRing', 2], ['bossLaser', 2], ['bossSpiral', 2], ['bossBones', 2]],
-      p2: [['bossDrip', 2], ['blueorange', 2], ['cross', 2]],
+      p2: [['bossDrip', 2], ['blueorange', 1], ['cross', 1], ['bossClock', 1]],
     },
     {
       key: 'angel', name: '堕天使ルシエル', color: '#ffe08a', hp: 640, r: 34,
@@ -297,7 +297,7 @@ const BOSSES = [
       phase2: '* ヴォイドの めが あかく そまった！',
       defeat: '* ヴォイドは とじて やみに かえった… きみたちの かちだ！',
       patterns: [['bossWeb', 2], ['bossBoomerang', 2], ['bossBones', 2], ['bossLaser', 2]],
-      p2: [['bossThunder', 2], ['bossSpiral', 2], ['blueorange', 2]],
+      p2: [['bossThunder', 2], ['bossSpiral', 2], ['blueorange', 1], ['bossRing', 1]],
     },
     {
       key: 'dragonking', name: '竜王バハムル', color: '#ff7f50', hp: 670, r: 40,
@@ -519,7 +519,7 @@ class Room {
     this.pshots = [];
     this.nextPattern = now + 3200; // 登場セリフの間は攻撃しない
     this.nextPatternStart = this.nextPattern;
-    this.wallUntil = 0; this.strictUntil = 0;
+    this.wallUntil = 0; this.strictUntil = 0; this.bonesUntil = 0; this.nextEscort = 0;
     this.nextExtraHeal = 0;
     this.talk(def.intro[0], 1600, now);
     setTimeout(() => { if (this.boss && this.boss.def === def && !this.boss.deadAt) this.talk(def.intro[1], 1800, Date.now()); }, 1600);
@@ -584,6 +584,15 @@ class Room {
       b.rage = true;
       this.talk(`* ${b.def.name}は さいごの ちからを ふりしぼった！`, 2200, now);
       this.emit('fx', { t: 'rage', x: b.x, y: b.y, color: b.def.color });
+    }
+    if (this.storyStage >= 1 && !b.deadAt && now < Math.max(this.wallUntil || 0, this.bonesUntil || 0) && now >= (this.strictUntil || 0) && now >= (this.nextEscort || 0)) {
+      // 壁や骨の柱が出ている間も、ボスがゆっくりした自機狙い弾を撃ってくる（壁も弾もプレイヤーより遅いので必ず避けられる）
+      this.nextEscort = now + (b.phase === 2 ? 900 : 1300) / (bo ? 1.25 : 1);
+      const tgt = pick(this.alivePlayers());
+      if (tgt) {
+        const at = this.bossPos(now + 400), a = Math.atan2(tgt.y - at.y, tgt.x - at.x), v = Math.min(140 * this.dp.speed, FAIR.wallV * 0.9);
+        this.spawn([-0.18, 0, 0.18].map((da, i) => ({ x: at.x, y: at.y, vx: Math.cos(a + da) * v, vy: Math.sin(a + da) * v, r: 6, t0: now + 400, warn: i === 1 })));
+      }
     }
     if (bo && !b.deadAt && now >= b.nextPress && now >= this.nextPatternStart && now >= (this.strictUntil || 0)) {
       // 後半ステージ：攻撃の合間も、フィールドの端から自機狙い弾が飛んでくる
@@ -679,6 +688,11 @@ class Room {
       ].filter(([, w]) => w > 0);
       gap = Math.max(450, 1900 - el * 18);
     }
+    if (now < (this.wallUntil || 0) || now < (this.bonesUntil || 0)) {
+      const nonWall = pool.filter(([n]) => !WALLS.has(n));
+      if (!nonWall.length) { this.nextPattern = Math.max(this.wallUntil || 0, this.bonesUntil || 0) + 200; return; }
+      pool = nonWall;
+    }
     const sp = Math.min(1.9, 0.85 + d * 0.12) * this.dp.speed; // 弾速倍率
     let total = pool.reduce((s, [, w]) => s + w, 0), r = Math.random() * total, name = pool[0][0];
     for (const [n, w] of pool) { if ((r -= w) <= 0) { name = n; break; } }
@@ -686,8 +700,9 @@ class Room {
     const dur = PATTERNS[name](this, now, d, sp);
     this.nextPattern = now + (dur || 0) * 0.6 + gap * this.dp.gap;
     // 壁を出したときは、壁が通り過ぎるまで次の攻撃を待つ（重ね攻撃もしない）
-    const isWall = WALLS.has(name) || (this.wallUntil || 0) > wallBefore;
-    if (isWall) this.nextPattern = Math.max(this.nextPattern, this.wallUntil + 200);
+    const paused = (this.wallUntil || 0) > wallBefore; // 壁（移動する壁・十字・青/オレンジ）は通り過ぎるまで次を待つ
+    const isWall = WALLS.has(name) || paused;
+    if (paused) this.nextPattern = Math.max(this.nextPattern, this.wallUntil + 200);
     const plan = this.layerPlan; this.layerPlan = null;
     if (plan && !isWall && plan.safe.length) {
       for (let L = 0; L < plan.layers; L++) {
@@ -1010,7 +1025,7 @@ const PATTERNS = {
         : { x: -10, y: s, vx: v, vy: 0, r: 7, t0, kind, warn: s === 8 });
     }
     room.spawn(list);
-    markWall(room, t0 + (W + 20) / v * 1000, true); // 青（止まる）/オレンジ（動く）に集中できるよう、この間は他の弾を出さない
+    markWall(room, t0 + (W + 20) / v * 1000, kind === K.BLUE); // 青（止まる）の壁の間は他の弾を一切出さない。オレンジ（動く）はゆっくりの狙い弾だけ
     return 1400 + (W + 20) / v * 1000;
   },
   // 十字砲火：四方から同時に壁
@@ -1077,16 +1092,23 @@ const PATTERNS = {
     const fromLeft = Math.random() < 0.5;
     for (let c = 0; c < cols; c++) {
       const x = fromLeft ? 40 + c * (400 / cols) : W - 40 - c * (400 / cols);
-      const up = c % 2 === 0, len = rand(140, 260);
+      const up = c % 2 === 0, len = rand(170, 300); // 骨は長め
       const kind = d > 2 && Math.random() < 0.35 ? (Math.random() < 0.5 ? K.BLUE : K.ORANGE) : K.NORMAL;
       const t0 = now + 700 + c * 260;
-      for (let y = 0; y < len; y += 14) {
+      for (let y = 0; y < len; y += 12) {
         const yy = up ? H + 10 + y : -10 - y;
         list.push({ x, y: yy, vx: 0, vy: (up ? -1 : 1) * Math.min(190 * sp, 280), r: 6, t0, kind, warn: y === 0 });
       }
     }
+    // 第2形態：同じ位置の柱がもう一度、逆向きに（安全な場所は変わらないので公平）
+    if (room.boss && room.boss.phase === 2) {
+      const extra = [];
+      for (const q of list) extra.push({ ...q, y: q.vy < 0 ? -10 - (q.y - H - 10) : H + 10 + (-10 - q.y), vy: -q.vy, t0: q.t0 + cols * 260 + 500, warn: q.warn });
+      list.push(...extra);
+    }
     room.spawn(list);
-    markWall(room, now + 700 + cols * 260 + 1500);
+    // 柱は画面全体を止めないが、柱が出ている間は「壁」系の攻撃を始めない（柱を横切らないと隙間に行けない、を防ぐ）
+    room.bonesUntil = Math.max(room.bonesUntil || 0, now + 700 + cols * 260 * (room.boss && room.boss.phase === 2 ? 2 : 1) + 2200);
     return 700 + cols * 260;
   },
   // ブーメラン：ボスから放たれた弾がいったん止まって戻ってくる（加速度を逆向きに）
