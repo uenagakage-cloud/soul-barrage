@@ -327,9 +327,19 @@ const BOSSES = [
 // heal: 回復アイテムの出現量の倍率（1.5 = 1.5倍、2 = 2倍）
 const STAGE_BOOST = [
   null, null, null,
-  { d: 0.6, gap: 0.6, layer: [0.45, 0.7], hp: 1.1, move: 1.15, press: [2300, 1700], rage: false, heal: 1.5 }, // STAGE 4
+  { d: 0.6, gap: 0.6, layer: [0.45, 0.7], hp: 1.1, move: 1.15, press: [2300, 1700], rage: false, heal: 1.5, // STAGE 4
+    oni: { d: 0.5, gap: 0.8, layer: [0.6, 0.85], press: 0.75, hp: 1.15 } }, // 鬼・神だけの上乗せ（AIテストプレイで公平化の前と同じ強さ＝クリア率3%前後に調整）
   { d: 1.2, gap: 0.42, layer: [0.8, 1.0], hp: 1.25, move: 1.3, press: [1500, 900], rage: true, heal: 2 }, // STAGE 5
 ];
+// 鬼・神（難易度3以上）では oni の値を上乗せする：d は足し算、gap・press・hp は掛け算、layer は置き換え
+function stageBoost(stage, diff) {
+  const b = STAGE_BOOST[stage];
+  if (!b) return null;
+  if (diff < 3 || !b.oni) return b;
+  const o = b.oni;
+  return { ...b, d: b.d + (o.d || 0), gap: b.gap * (o.gap || 1), layer: o.layer || b.layer,
+    press: b.press.map(v => v * (o.press || 1)), hp: b.hp * (o.hp || 1) };
+}
 
 let highScores = []; // ソロ生存時間のトップ10（メモリ保持。サーバー再起動でリセット）
 function submitScore(name, ms, diff) {
@@ -506,7 +516,7 @@ class Room {
   startStage(now) {
     const def = pick(BOSSES[this.storyStage]); // 候補5体からランダム
     const n = Math.max(1, [...this.players.values()].length);
-    const boost = STAGE_BOOST[this.storyStage] || null;
+    const boost = stageBoost(this.storyStage, this.cfg.diff);
     const hp = Math.round(def.hp * this.dp.bossHp * (0.6 + 0.4 * n) * (boost ? boost.hp : 1)); // 人数が多いほどボスも硬い。後半ステージはさらに上乗せ
     this.lastBossName = def.name;
     this.boss = { def, hp, max: hp, boost, rage: false, nextPress: now + 4000, t0: now, phase: 1, x: W / 2, y: def.move.y, flashUntil: 0, deadAt: 0, stageStart: now };
