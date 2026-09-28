@@ -327,8 +327,8 @@ const BOSSES = [
 // heal: 回復アイテムの出現量の倍率（1.5 = 1.5倍、2 = 2倍）
 const STAGE_BOOST = [
   null, null, null,
-  { d: 0.6, gap: 0.7, layer: [0.3, 0.55], hp: 1.1, move: 1.15, press: [2600, 1900], rage: false, heal: 1.5 }, // STAGE 4
-  { d: 1.2, gap: 0.5, layer: [0.6, 0.9], hp: 1.25, move: 1.3, press: [1800, 1300], rage: true, heal: 2 }, // STAGE 5
+  { d: 0.6, gap: 0.6, layer: [0.45, 0.7], hp: 1.1, move: 1.15, press: [2300, 1700], rage: false, heal: 1.5 }, // STAGE 4
+  { d: 1.2, gap: 0.42, layer: [0.8, 1.0], hp: 1.25, move: 1.3, press: [1500, 900], rage: true, heal: 2 }, // STAGE 5
 ];
 
 let highScores = []; // ソロ生存時間のトップ10（メモリ保持。サーバー再起動でリセット）
@@ -519,6 +519,7 @@ class Room {
     this.pshots = [];
     this.nextPattern = now + 3200; // 登場セリフの間は攻撃しない
     this.nextPatternStart = this.nextPattern;
+    this.wallUntil = 0; this.strictUntil = 0;
     this.nextExtraHeal = 0;
     this.talk(def.intro[0], 1600, now);
     setTimeout(() => { if (this.boss && this.boss.def === def && !this.boss.deadAt) this.talk(def.intro[1], 1800, Date.now()); }, 1600);
@@ -584,7 +585,7 @@ class Room {
       this.talk(`* ${b.def.name}は さいごの ちからを ふりしぼった！`, 2200, now);
       this.emit('fx', { t: 'rage', x: b.x, y: b.y, color: b.def.color });
     }
-    if (bo && !b.deadAt && now >= b.nextPress && now >= this.nextPatternStart) {
+    if (bo && !b.deadAt && now >= b.nextPress && now >= this.nextPatternStart && now >= (this.strictUntil || 0)) {
       // 後半ステージ：攻撃の合間も、フィールドの端から自機狙い弾が飛んでくる
       b.nextPress = now + (b.rage ? 900 : bo.press[b.phase === 2 ? 1 : 0]);
       const targets = this.alivePlayers();
@@ -658,15 +659,15 @@ class Room {
       const bo = b.boost; // ステージ4・5の強化設定（STAGE_BOOST）
       d = 1.3 + this.storyStage * 0.3 + (p2 ? 0.5 : 0) + (bo ? bo.d : 0) + (b.rage ? 0.5 : 0);
       pool = p2 ? [...b.def.patterns, ...b.def.p2] : b.def.patterns;
+      // 最後のあがき：全体を止めてしまう攻撃（青/オレンジの壁・骨の柱）は使わず、休みなく攻め続ける
+      if (b.rage) { const f = pool.filter(([n]) => n !== 'blueorange' && n !== 'bossBones'); if (f.length) pool = f; }
       gap = Math.max(bo ? 200 : 350, (1500 - this.storyStage * 100 - (p2 ? 250 : 0)) * (bo ? (b.rage ? 0.4 : bo.gap) : 1));
       // 後半ステージは別の攻撃を同時に重ねてくる（最後のあがきは必ず2つ＋50%で3つ目）
       if (bo) {
         const layers = (b.rage || Math.random() < bo.layer[p2 ? 1 : 0] ? 1 : 0) + (b.rage && Math.random() < 0.5 ? 1 : 0);
         const sp2 = Math.min(1.9, 0.85 + d * 0.12) * this.dp.speed;
-        for (let L = 0; L < layers; L++) {
-          const other = pool[Math.floor(Math.random() * pool.length)][0];
-          setTimeout(() => { if (this.boss === b && !b.deadAt && this.state === 'play') PATTERNS[other](this, Date.now(), d, sp2); }, 250 + L * 350);
-        }
+        const safe = pool.filter(([n]) => !WALLS.has(n)); // 重ねるのは壁以外の攻撃だけ
+        this.layerPlan = { layers, sp2, d, safe, b };
       }
     } else {
       const el = (now - this.roundStart) / 1000;
@@ -681,8 +682,21 @@ class Room {
     const sp = Math.min(1.9, 0.85 + d * 0.12) * this.dp.speed; // 弾速倍率
     let total = pool.reduce((s, [, w]) => s + w, 0), r = Math.random() * total, name = pool[0][0];
     for (const [n, w] of pool) { if ((r -= w) <= 0) { name = n; break; } }
+    const wallBefore = this.wallUntil || 0;
     const dur = PATTERNS[name](this, now, d, sp);
     this.nextPattern = now + (dur || 0) * 0.6 + gap * this.dp.gap;
+    // 壁を出したときは、壁が通り過ぎるまで次の攻撃を待つ（重ね攻撃もしない）
+    const isWall = WALLS.has(name) || (this.wallUntil || 0) > wallBefore;
+    if (isWall) this.nextPattern = Math.max(this.nextPattern, this.wallUntil + 200);
+    const plan = this.layerPlan; this.layerPlan = null;
+    if (plan && !isWall && plan.safe.length) {
+      for (let L = 0; L < plan.layers; L++) {
+        const other = plan.safe[Math.floor(Math.random() * plan.safe.length)][0];
+        setTimeout(() => {
+          if (this.boss === plan.b && !plan.b.deadAt && this.state === 'play' && Date.now() >= (this.wallUntil || 0)) PATTERNS[other](this, Date.now(), plan.d, plan.sp2);
+        }, 250 + L * 350);
+      }
+    }
   }
 
   // ===== メインループ =====
@@ -857,6 +871,33 @@ class Room {
   }
 }
 
+// ===== 「避けられる」ことを保証するためのルール =====
+// 壁（一列に並んだ弾）は、どの難易度でも必ず「たどり着ける隙間」を残す：
+//   ・壁の速さはプレイヤーの移動速度より遅くする
+//   ・隙間の幅は最低 FAIR.gap
+//   ・隙間の位置は、プレイヤー（前の壁の隙間）から移動が間に合う範囲に置く
+//   ・壁は1回の攻撃で最大 FAIR.waves 枚、間隔は FAIR.waveGap 以上
+//   ・壁が画面にある間は、別の攻撃を重ねない・端からの狙い撃ちも止める
+const FAIR = {
+  wallV: C.SPEED * 0.85,  // 壁の最高速度（プレイヤーより遅い）
+  gap: 76,                // 隙間の幅（弾の中心どうしの距離）
+  waves: 3,               // 1回の攻撃で来る壁の最大枚数
+  waveGap: 1150,          // 壁と壁の間隔 ms
+  reach: C.SPEED * 0.55,  // 「1秒あたりに無理なく移動できる距離」の見積もり
+  fastV: 650,             // 高速の列弾（レーザー・斬撃・雷）の上限速度
+};
+const WALLS = new Set(['sweep', 'cross', 'blueorange', 'bossBones']);
+// 隙間の位置：基準点 base から、与えられた時間内に移動できる範囲でランダムに決める
+function fairGap(base, seconds, lo = 50, hi = W - 50) {
+  const r = Math.max(40, FAIR.reach * seconds);
+  return clamp(base + rand(-r, r), lo, hi);
+}
+// 壁が画面を通過し終わる時刻を記録（その間は他の攻撃を重ねない）
+function markWall(room, until, strict) {
+  room.wallUntil = Math.max(room.wallUntil || 0, until);
+  if (strict) room.strictUntil = Math.max(room.strictUntil || 0, until); // 青/オレンジ：狙い撃ちも止める
+}
+
 // ===== 弾幕パターン（戻り値: パターンの長さ ms） =====
 // room.dn(n) で難易度に応じて弾数を増減、sp には難易度の弾速倍率が掛かっている
 const PATTERNS = {
@@ -871,24 +912,28 @@ const PATTERNS = {
   },
   // 隙間のある壁が四方のどこかから迫る
   sweep(room, now, d, sp) {
-    const waves = room.dn(d > 2.2 ? 3 : 2), list = [];
-    const gapW = Math.max(48, (90 - d * 6) / Math.sqrt(room.dp.dens));
+    const waves = Math.min(FAIR.waves, room.dn(d > 2.2 ? 3 : 2)), list = [];
+    const v = Math.min(120 * sp, FAIR.wallV);
+    // 1回の攻撃の中では同じ方向から来るように揃え（届く順番＝出てくる順番）、隙間が前の壁から追える位置に来るようにする
+    const vertical = Math.random() < 0.5; // true: 上下から来る壁（隙間はx方向）
+    const fromStart = Math.random() < 0.5; // 上 or 下（左 or 右）
+    const tgt = pick(room.alivePlayers()) || { x: W / 2, y: H / 2 };
+    let gap = vertical ? tgt.x : tgt.y;
     for (let w = 0; w < waves; w++) {
-      const side = Math.floor(Math.random() * 4);
-      const gap = rand(60, W - 60);
-      const t0 = now + 500 + w * 900;
+      const t0 = now + 700 + w * FAIR.waveGap;
+      // 最初の壁は予告+到達までの時間、2枚目以降は壁の間隔の時間で移動できる範囲に隙間を置く
+      gap = fairGap(gap, w === 0 ? 0.7 + 160 / v : FAIR.waveGap / 1000);
       for (let s = 12; s < W; s += 22) {
-        if (Math.abs(s - gap) < gapW / 2) continue;
-        const v = 120 * sp;
-        const b = [
-          { x: s, y: -10, vx: 0, vy: v }, { x: s, y: H + 10, vx: 0, vy: -v },
-          { x: -10, y: s, vx: v, vy: 0 }, { x: W + 10, y: s, vx: -v, vy: 0 },
-        ][side];
+        if (Math.abs(s - gap) < FAIR.gap / 2) continue;
+        const b = vertical
+          ? (fromStart ? { x: s, y: -10, vx: 0, vy: v } : { x: s, y: H + 10, vx: 0, vy: -v })
+          : (fromStart ? { x: -10, y: s, vx: v, vy: 0 } : { x: W + 10, y: s, vx: -v, vy: 0 });
         list.push({ ...b, r: 7, t0, warn: true, kind: K.BIG });
       }
+      markWall(room, t0 + (W + 20) / v * 1000);
     }
     room.spawn(list);
-    return 900 * waves;
+    return 700 + waves * FAIR.waveGap;
   },
   // ボックス内のランダム地点から円形に拡散（予告あり）
   ring(room, now, d, sp) {
@@ -958,26 +1003,30 @@ const PATTERNS = {
   blueorange(room, now, d, sp) {
     const kind = Math.random() < 0.5 ? K.BLUE : K.ORANGE;
     const fromTop = Math.random() < 0.5, list = [];
-    const t0 = now + 900;
+    const t0 = now + 1400, v = Math.min(95 * sp, FAIR.wallV * 0.8); // 予告を長めに（前の攻撃の弾が消えるのを待つ）
     for (let s = 8; s < W; s += 12) {
       list.push(fromTop
-        ? { x: s, y: -10, vx: 0, vy: 95 * sp, r: 7, t0, kind, warn: s === 8 }
-        : { x: -10, y: s, vx: 95 * sp, vy: 0, r: 7, t0, kind, warn: s === 8 });
+        ? { x: s, y: -10, vx: 0, vy: v, r: 7, t0, kind, warn: s === 8 }
+        : { x: -10, y: s, vx: v, vy: 0, r: 7, t0, kind, warn: s === 8 });
     }
     room.spawn(list);
-    return 1800;
+    markWall(room, t0 + (W + 20) / v * 1000, true); // 青（止まる）/オレンジ（動く）に集中できるよう、この間は他の弾を出さない
+    return 1400 + (W + 20) / v * 1000;
   },
   // 十字砲火：四方から同時に壁
   cross(room, now, d, sp) {
-    const list = [];
-    const gx = rand(80, W - 80), gy = rand(80, H - 80);
-    const t0 = now + 1000;
+    const list = [], v = Math.min(100 * sp, FAIR.wallV);
+    const tgt = pick(room.alivePlayers()) || { x: W / 2, y: H / 2 };
+    const t0 = now + 1000, t1 = t0 + FAIR.waveGap;
+    const gx = fairGap(tgt.x, 1.0 + tgt.y / v, 60, W - 60);
+    const gy = fairGap(tgt.y, (t1 - now) / 1000, 60, H - 60);
     for (let s = 12; s < W; s += 26) {
-      if (Math.abs(s - gx) > 34) list.push({ x: s, y: -10, vx: 0, vy: 100 * sp, r: 6, t0, warn: s === 12 });
-      if (Math.abs(s - gy) > 34) list.push({ x: -10, y: s, vx: 100 * sp, vy: 0, r: 6, t0: t0 + 500 });
+      if (Math.abs(s - gx) > FAIR.gap / 2) list.push({ x: s, y: -10, vx: 0, vy: v, r: 6, t0, warn: s === 12 });
+      if (Math.abs(s - gy) > FAIR.gap / 2) list.push({ x: -10, y: s, vx: v, vy: 0, r: 6, t0: t1, warn: s === 12 });
     }
     room.spawn(list);
-    return 2000;
+    markWall(room, t1 + (W + 20) / v * 1000);
+    return 1000 + FAIR.waveGap + 400;
   },
 
   // ----- ここからボス専用（ボスの位置から撃つ） -----
@@ -1024,7 +1073,7 @@ const PATTERNS = {
   },
   // 床と天井から骨（弾の柱）が交互に突き出す（青い骨・オレンジの骨も混ざる）
   bossBones(room, now, d, sp) {
-    const cols = room.dn(5 + d), list = [];
+    const cols = Math.min(8, room.dn(5 + d)), list = []; // 最大8本＝柱の間隔は50px以上
     const fromLeft = Math.random() < 0.5;
     for (let c = 0; c < cols; c++) {
       const x = fromLeft ? 40 + c * (400 / cols) : W - 40 - c * (400 / cols);
@@ -1033,10 +1082,11 @@ const PATTERNS = {
       const t0 = now + 700 + c * 260;
       for (let y = 0; y < len; y += 14) {
         const yy = up ? H + 10 + y : -10 - y;
-        list.push({ x, y: yy, vx: 0, vy: (up ? -1 : 1) * 190 * sp, r: 6, t0, kind, warn: y === 0 });
+        list.push({ x, y: yy, vx: 0, vy: (up ? -1 : 1) * Math.min(190 * sp, 280), r: 6, t0, kind, warn: y === 0 });
       }
     }
     room.spawn(list);
+    markWall(room, now + 700 + cols * 260 + 1500);
     return 700 + cols * 260;
   },
   // ブーメラン：ボスから放たれた弾がいったん止まって戻ってくる（加速度を逆向きに）
@@ -1074,11 +1124,11 @@ const PATTERNS = {
   },
   // 雷：予告の後、縦一列に高速で落ちてくる稲妻を数本
   bossThunder(room, now, d, sp) {
-    const bolts = room.dn(3 + d * 0.8), list = [], targets = room.alivePlayers();
+    const bolts = Math.min(8, room.dn(3 + d * 0.8)), list = [], targets = room.alivePlayers();
     for (let k = 0; k < bolts; k++) {
       const x = targets.length && k % 2 === 0 ? clamp(pick(targets).x + rand(-30, 30), 10, W - 10) : rand(20, W - 20);
       const t0 = now + 900 + k * 260;
-      for (let i = 0; i < 14; i++) list.push({ x: x + rand(-4, 4), y: -10, vx: 0, vy: 520 * sp, r: 6, t0: t0 + i * 22, life: 2000, warn: i === 0, kind: K.BIG });
+      for (let i = 0; i < 14; i++) list.push({ x: x + rand(-4, 4), y: -10, vx: 0, vy: Math.min(520 * sp, FAIR.fastV), r: 6, t0: t0 + i * 22, life: 2000, warn: i === 0, kind: K.BIG });
     }
     room.spawn(list);
     return 900 + bolts * 260;
@@ -1091,7 +1141,8 @@ const PATTERNS = {
       const fromLeft = Math.random() < 0.5, y0 = rand(40, H - 40), y1 = rand(40, H - 40);
       const x0 = fromLeft ? -10 : W + 10, a = Math.atan2(y1 - y0, (fromLeft ? W : -W));
       for (let i = 0; i < 16; i++) {
-        list.push({ x: x0, y: y0, vx: Math.cos(a) * 420 * sp, vy: Math.sin(a) * 420 * sp, r: 6, t0: t0 + i * 18, life: 2000, warn: i === 0, kind: K.BIG });
+        const cv = Math.min(420 * sp, FAIR.fastV);
+        list.push({ x: x0, y: y0, vx: Math.cos(a) * cv, vy: Math.sin(a) * cv, r: 6, t0: t0 + i * 18, life: 2000, warn: i === 0, kind: K.BIG });
       }
     }
     room.spawn(list);
@@ -1134,7 +1185,8 @@ const PATTERNS = {
       const tgt = pick(targets), t0 = now + 1000 + k * 500, at = room.bossPos(t0);
       const a = Math.atan2(tgt.y - at.y, tgt.x - at.x);
       for (let i = 0; i < 18; i++) {
-        list.push({ x: at.x, y: at.y, vx: Math.cos(a) * 360 * sp, vy: Math.sin(a) * 360 * sp, r: 7, t0: t0 + i * 28, life: 2500, warn: i === 0, kind: K.BIG });
+        const lv = Math.min(360 * sp, FAIR.fastV);
+        list.push({ x: at.x, y: at.y, vx: Math.cos(a) * lv, vy: Math.sin(a) * lv, r: 7, t0: t0 + i * 28, life: 2500, warn: i === 0, kind: K.BIG });
       }
     }
     room.spawn(list);
